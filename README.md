@@ -1,96 +1,97 @@
-# JIC-Geo — Dynamic Risk Index for Hiking Routes
+# JIC-Geo — Índice Dinámico de Riesgo en Senderismo
 
-JIC-Geo is a Geographic Information System (GIS) and routing engine designed to compute a dynamic risk index for hiking trails. By correlating biometric models (metabolic cost, velocity profiles) with spatial data (DEM elevations, gradients) and real-time meteorological conditions (WBGT, precipitation), it identifies safety issues and designs optimal paths with climate-adaptive routing.
+JIC-Geo es un Sistema de Información Geográfica (SIG) y motor de enrutamiento que calcula un índice dinámico de riesgo para rutas de senderismo. Correlaciona modelos biométricos (costo metabólico, perfiles de velocidad) con datos espaciales (elevaciones DEM, gradientes) y condiciones meteorológicas en tiempo real (WBGT, precipitación) para identificar problemas de seguridad y diseñar rutas óptimas con enrutamiento adaptado al clima.
 
 ---
 
-## Tech Stack
+## Stack Tecnológico
 
-| Layer | Technology |
+| Capa | Tecnología |
 |---|---|
 | **Backend** | Python 3.12 · FastAPI · SQLAlchemy (GeoAlchemy2) · Alembic · Scipy |
 | **Frontend** | Vue 3 (Vite + TS) · Pinia · MapLibre GL JS · Tailwind CSS · DaisyUI |
-| **Database** | PostgreSQL 16 · PostGIS (Spatial & Raster) · pgRouting |
-| **Containers** | Docker · Docker Compose |
+| **Base de Datos** | PostgreSQL 16 · PostGIS (Espacial y Ráster) · pgRouting |
+| **Contenedores** | Docker · Docker Compose |
 
 ---
 
-## Directory Structure
+## Estructura de Directorios
 
 ```
 JIC-Geo/
-├── backend/                  # FastAPI REST API & Unit Tests
+├── backend/                  # API REST FastAPI y tests unitarios
 │   ├── app/
-│   │   ├── api/v1/           # API routes (REST endpoints)
-│   │   ├── db/               # SQLAlchemy models & DB sessions
-│   │   └── modules/          # Domain services (dat, rut, vel, met, prf, cli, sim, rie, grf)
-│   └── tests/                # Pytest unit & integration suites
-├── frontend/                 # Vue 3 Single Page Application
+│   │   ├── api/v1/           # Rutas de la API (endpoints REST)
+│   │   ├── db/               # Modelos SQLAlchemy y sesiones de DB
+│   │   └── modules/          # Servicios de dominio (dat, rut, vel, met, prf, cli, sim, rie, grf)
+│   └── tests/                # Suites de tests unitarios e integración con Pytest
+├── frontend/                 # Aplicación de Página Única en Vue 3
 │   ├── src/
-│   │   ├── assets/           # Styles (Tailwind directives)
-│   │   ├── components/       # Vue components (map, sidebar, simulation, upload)
-│   │   ├── composables/      # Shared state helpers & theme controllers
-│   │   └── stores/           # Pinia stores (global state)
+│   │   ├── assets/           # Estilos (directivas Tailwind)
+│   │   ├── components/       # Componentes Vue (map, sidebar, simulation, upload)
+│   │   ├── composables/      # Helpers de estado compartido y controladores de tema
+│   │   └── stores/           # Stores de Pinia (estado global)
 │   ├── tailwind.config.cjs
 │   └── postcss.config.cjs
-├── db/                       # SQL scripts to bootstrap database extensions
-├── docs/                     # System requirements, math formulas, and specs
-│   ├── Requerimientos.md     # Base requirements
-│   ├── Formulas.md           # Biomechanical and climate formulas
-│   ├── mitigacion.md         # Database optimizations and mitigations
-│   ├── plan.md               # 8-Phase implementation plan
-│   └── issues.md             # Backlog of GitHub issues
-├── data/                     # DEM files and GPX samples (gitignored)
-└── docker-compose.yml        # Docker composition for database
+├── db/                       # Scripts SQL para inicializar extensiones de la base de datos
+├── docs/                     # Requerimientos, fórmulas, especificaciones y arquitectura
+│   ├── architecture.md       # Reglas de arquitectura a seguir
+│   ├── Requerimientos.md     # Requerimientos base del sistema
+│   ├── Formulas.md           # Fórmulas biomecánicas y climáticas
+│   ├── mitigacion.md         # Optimizaciones y mitigaciones de PostGIS
+│   ├── plan.md               # Plan de implementación en 8 fases
+│   └── issues.md             # Backlog de issues por fase
+├── data/                     # Archivos DEM y muestras GPX (en .gitignore)
+└── docker-compose.yml        # Composición Docker para la base de datos
 ```
 
 ---
 
-## Quick Start (Docker-First)
+## Inicio Rápido (Docker)
 
-### Requirements
-Ensure you have Docker and `make` installed.
+### Requisitos
+Tener Docker y `make` instalados.
 
-### Setup & Run
-1. Copy the environment template:
+### Configuración y ejecución
+1. Copiar la plantilla de variables de entorno:
    ```bash
    cp .env.example .env
    ```
-2. Spin up the infrastructure:
+2. Levantar la infraestructura:
    ```bash
    make dev
    ```
-   *This starts the PostgreSQL + PostGIS + pgRouting database in the background.*
+   *Inicia PostgreSQL + PostGIS + pgRouting en segundo plano.*
 
-3. Spin up the frontend development server:
+3. Levantar el servidor de desarrollo del frontend:
    ```bash
    make frontend
    ```
-   *The frontend runs at `http://localhost:5173`.*
+   *El frontend corre en `http://localhost:5173`.*
 
-4. Spin up the backend natively (optional if not running via Docker):
+4. Levantar el backend localmente (opcional si no usás Docker):
    ```bash
    make backend
    ```
-   *The API will be available at `http://localhost:8000/docs` (Swagger UI).*
+   *La API estará disponible en `http://localhost:8000/docs` (Swagger UI).*
 
 ---
 
-## Native Installation (macOS Fallback)
+## Instalación Nativa (macOS — alternativa sin Docker)
 
-If you prefer to run the database natively on macOS using Homebrew:
+Si preferís correr la base de datos de forma nativa con Homebrew:
 
-1. **Install PostgreSQL and PostGIS:**
+1. **Instalar PostgreSQL y PostGIS:**
    ```bash
    brew install postgresql@16 postgis pgrouting
    ```
 
-2. **Start the database service:**
+2. **Iniciar el servicio de base de datos:**
    ```bash
    brew services start postgresql@16
    ```
 
-3. **Initialize the Database:**
+3. **Inicializar la base de datos:**
    ```bash
    createdb jicgeo
    psql jicgeo -c "CREATE EXTENSION IF NOT EXISTS postgis;"
@@ -98,7 +99,7 @@ If you prefer to run the database natively on macOS using Homebrew:
    psql jicgeo -c "CREATE EXTENSION IF NOT EXISTS pgrouting;"
    ```
 
-4. **Verify Installations:**
+4. **Verificar las instalaciones:**
    ```bash
    psql jicgeo -c "SELECT postgis_full_version();"
    psql jicgeo -c "SELECT pgr_version();"
@@ -106,29 +107,29 @@ If you prefer to run the database natively on macOS using Homebrew:
 
 ---
 
-## Development Commands
+## Comandos de Desarrollo
 
-A `Makefile` is configured in the root to automate common tasks:
+El `Makefile` en la raíz automatiza las tareas más comunes:
 
-| Command | Action |
+| Comando | Acción |
 |---|---|
-| `make dev` | Spins up the PostgreSQL/PostGIS database container. |
-| `make db-only` | Starts only the DB container (useful for native backend development). |
-| `make migrate` | Applies Alembic migrations to the active database. |
-| `make backend` | Starts the FastAPI application locally with reload enabled. |
-| `make frontend` | Launches the Vite frontend development server. |
-| `make lint` | Runs `ruff` check and `mypy` type checker on the backend. |
-| `make test` | Runs the Python unit tests with `pytest`. |
-| `make db-reset` | Destroys the database volume and rebuilds it fresh (warning: destructive). |
+| `make dev` | Levanta el contenedor de la base de datos PostgreSQL/PostGIS. |
+| `make db-only` | Inicia solo el contenedor de DB (útil para desarrollo nativo del backend). |
+| `make migrate` | Aplica las migraciones de Alembic a la base de datos activa. |
+| `make backend` | Inicia la aplicación FastAPI localmente con reload habilitado. |
+| `make frontend` | Lanza el servidor de desarrollo Vite para el frontend. |
+| `make lint` | Ejecuta `ruff` y `mypy` sobre el código del backend. |
+| `make test` | Corre los tests unitarios de Python con `pytest`. |
+| `make db-reset` | Destruye el volumen de la DB y lo reconstruye desde cero (⚠️ destructivo). |
 
 ---
 
-## Internal Documentation References
+## Documentación Interna
 
-For specific details regarding formulas, optimizations, and issues:
-* **Architecture Rules:** [architecture.md](file:///Users/Irvinng/Developer/Proyectos/JIC-Geo/docs/architecture.md)
-* **Requirements & Specs:** [Requerimientos.md](file:///Users/Irvinng/Developer/Proyectos/JIC-Geo/docs/Requerimientos.md)
-* **Mathematical & Biomechanical Formulas:** [Formulas.md](file:///Users/Irvinng/Developer/Proyectos/JIC-Geo/docs/Formulas.md)
-* **Optimization & PostGIS Mitigations:** [mitigacion.md](file:///Users/Irvinng/Developer/Proyectos/JIC-Geo/docs/mitigacion.md)
-* **Roadmap Plan:** [plan.md](file:///Users/Irvinng/Developer/Proyectos/JIC-Geo/docs/plan.md)
-* **Issues Backlog:** [issues.md](file:///Users/Irvinng/Developer/Proyectos/JIC-Geo/docs/issues.md)
+Para detalles específicos sobre fórmulas, optimizaciones e issues:
+* **Reglas de Arquitectura:** [architecture.md](docs/architecture.md)
+* **Requerimientos del Sistema:** [Requerimientos.md](docs/Requerimientos.md)
+* **Fórmulas Biomecánicas y Climáticas:** [Formulas.md](docs/Formulas.md)
+* **Optimizaciones y Mitigaciones PostGIS:** [mitigacion.md](docs/mitigacion.md)
+* **Plan de Implementación:** [plan.md](docs/plan.md)
+* **Backlog de Issues:** [issues.md](docs/issues.md)

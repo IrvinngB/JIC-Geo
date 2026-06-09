@@ -1,141 +1,144 @@
-# Project Backlog & Issues
+# Backlog de Issues — JIC-Geo
 
-This document defines the GitHub/GitLab issues representing the remaining phases of the JIC-Geo project. Each issue is formulated following conventional commit standards and includes detailed descriptions, acceptance criteria (Definition of Done), and affected modules.
+Este documento define los issues de GitHub que representan las fases restantes del proyecto JIC-Geo. Cada issue sigue la convención de Conventional Commits e incluye descripción detallada, criterios de aceptación (Definición de Hecho) y módulos afectados.
 
 ---
 
-## Quick Path to Creation
+## Creación Rápida con GitHub CLI
 
-You can create these issues directly using the GitHub CLI (`gh`). For example:
+Podés crear los issues directamente usando `gh`:
 ```bash
-gh issue create --title "feat(backend): implement DAT spatial ingestion (GPX/GeoJSON upload) and DEM models" --body-file docs/issues.md --label "enhancement,status:needs-review"
+gh issue create \
+  --title "feat(dat): implementar ingesta espacial GPX/GeoJSON y modelos DEM" \
+  --body-file docs/issues.md \
+  --label "enhancement,status:needs-review"
 ```
 
 ---
 
-## Phase-by-Phase Backlog
+## Backlog por Fase
 
-### Issue 1: `feat(backend): implement DAT spatial ingestion (GPX/GeoJSON upload) and DEM models`
-* **Phase:** 1 — DAT Ingesta de Datos Espaciales
+### Issue 1: `feat(dat): implementar ingesta espacial GPX/GeoJSON y registro de fuentes DEM`
+* **Fase:** 1 — DAT Ingesta de Datos Espaciales
 * **Labels:** `enhancement`, `status:needs-review`
 
-#### Description
-Set up the core spatial database models and route ingestion pipeline. The system needs to accept GPX or GeoJSON files, parse their geometric properties, and store them as 3D Linestrings (3DZ, SRID 4326) in PostGIS. Additionally, configure the DEM (Digital Elevation Model) metadata registry table to prepare for elevation extraction.
+#### Descripción
+Configurar los modelos de base de datos espacial y el pipeline de ingesta de rutas. El sistema debe aceptar archivos GPX o GeoJSON, parsear sus propiedades geométricas y almacenarlas como LineString 3D (3DZ, SRID 4326) en PostGIS. Además, configurar la tabla de registro de fuentes DEM para preparar la extracción de elevaciones.
 
-#### Acceptance Criteria
-- [ ] Implement `Route`, `Segment`, `SegmentCosts`, and `DEMSource` ORM models in `backend/app/db/models.py`.
-- [ ] Create Alembic migration verifying spatial indices (`idx_routes_geom` and `idx_segments_geom` using GIST).
-- [ ] Implement parser service for GPX/GeoJSON files.
-- [ ] Expose `POST /routes/upload` that receives a GPX or GeoJSON file, parses it, and populates the `routes` table with 3DZ geometry.
-- [ ] Write integration test uploading a sample GPX/GeoJSON and validating it was stored with Z coordinates.
+#### Criterios de Aceptación
+- [ ] Implementar modelos ORM `Route`, `Segment`, `SegmentCosts` y `DEMSource` en `backend/app/db/models.py`.
+- [ ] Crear migración Alembic que verifique índices espaciales (`idx_routes_geom` e `idx_segments_geom` con GIST).
+- [ ] Implementar servicio de parseo de archivos GPX y GeoJSON en `backend/app/modules/dat/service.py`.
+- [ ] Exponer `POST /routes/upload` que reciba un archivo GPX o GeoJSON, lo parsee y persista en la tabla `routes` con geometría 3DZ.
+- [ ] Test de integración que suba un GPX de muestra y valide que se almacenó con coordenadas Z.
 
 ---
 
-### Issue 2: `feat(backend): implement RUT route segmentation, interpolation, and gradient smoothing`
-* **Phase:** 2 — RUT Segmentación y Gradiente
+### Issue 2: `feat(rut): implementar segmentación de rutas, interpolación DEM y suavizado de gradiente`
+* **Fase:** 2 — RUT Segmentación y Gradiente
 * **Labels:** `enhancement`, `status:needs-review`
 
-#### Description
-Implement the route processing pipeline. Routes must be segmented into equal-distance segments (default 100m). For each segment point, retrieve clean elevation from the DEM using bilinear interpolation. Implement noise-mitigation filters (Savitzky-Golay) to smooth elevations, detect slope spikes ($|S| > 0.75$), and calculate segment gradients ($S = \Delta h / \Delta x$).
+#### Descripción
+Implementar el pipeline de procesamiento de rutas. Las rutas deben segmentarse en tramos de igual distancia (por defecto 100m). Para cada punto del segmento, obtener la elevación limpia del DEM usando interpolación bilineal. Implementar filtros de reducción de ruido (Savitzky-Golay) para suavizar elevaciones, detectar spikes de gradiente ($|S| > 0.75$) y calcular el gradiente por segmento ($S = \Delta h / \Delta x$).
 
-#### Acceptance Criteria
-- [ ] Implement segmentation function in `backend/app/modules/rut/service.py` to divide lines into 100m sub-lines.
-- [ ] Implement bilinear interpolation query to extract elevation from `postgis_raster`.
-- [ ] Integrate `scipy.signal.savgol_filter` for elevation smoothing.
-- [ ] Implement spike detection and mark corrected points in `elevation_interpolated`.
-- [ ] Calculate gradient ($S$) and accumulation values (positive and negative gain).
-- [ ] Unit tests for the elevation smoothing and segmentation logic.
+#### Criterios de Aceptación
+- [ ] Implementar función de segmentación en `backend/app/modules/rut/service.py` que divida las líneas en sub-tramos de 100m.
+- [ ] Implementar query de interpolación bilineal para extraer elevación desde `postgis_raster`.
+- [ ] Integrar `scipy.signal.savgol_filter` para el suavizado de elevaciones.
+- [ ] Implementar detección de spikes y marcar puntos corregidos en `elevation_interpolated`.
+- [ ] Calcular gradiente ($S$) y acumulación de desniveles (positivo y negativo).
+- [ ] Tests unitarios para el suavizado de elevaciones y la lógica de segmentación.
 
 ---
 
-### Issue 3: `feat(backend): implement biomechanical models (Tobler velocity & Minetti/Pandolf metabolic cost)`
-* **Phase:** 3 — VEL + MET + PRF Motor Biomecánico
+### Issue 3: `feat(vel,met,prf): implementar modelos biomecánicos (Tobler, Minetti/Pandolf) y perfil del excursionista`
+* **Fase:** 3 — VEL + MET + PRF Motor Biomecánico
 * **Labels:** `enhancement`, `status:needs-review`
 
-#### Description
-Implement core human movement and energy expenditure calculations. This includes Tobler's hiking function (and Irmischer-Clarke alternative) for velocity estimation based on slope, Minetti's Cost of Transport (CoT) with safe linear extrapolation for steep slopes, and Pandolf's metabolic rate formula. Incorporate hiker profile settings (weight, load, fitness level).
+#### Descripción
+Implementar los cálculos de movimiento humano y gasto energético. Incluye la función de senderismo de Tobler (y la alternativa Irmischer-Clarke) para la estimación de velocidad según la pendiente, el Costo de Transporte de Minetti (CoT) con extrapolación lineal segura para pendientes pronunciadas, y la fórmula de tasa metabólica de Pandolf. Incorporar el perfil del excursionista (peso, carga, nivel de condición física).
 
-#### Acceptance Criteria
-- [ ] Implement Tobler and Irmischer-Clarke velocity functions in `backend/app/modules/vel/service.py`.
-- [ ] Implement Minetti formula with safe linear extrapolation ($|S| > 0.60$) in `backend/app/modules/met/service.py`.
-- [ ] Implement Pandolf metabolic rate formula (Watts) including terrain factor ($\eta$) lookup.
-- [ ] Add Pydantic validation for `HikerProfile` ensuring load weight < body weight.
-- [ ] Verify calculations against formulas reference values via unit tests (e.g., flat terrain CoT $\approx 2.5$ J/kg·m).
+#### Criterios de Aceptación
+- [ ] Implementar funciones de velocidad de Tobler e Irmischer-Clarke en `backend/app/modules/vel/service.py`.
+- [ ] Implementar la fórmula de Minetti con extrapolación lineal segura ($|S| > 0.60$) en `backend/app/modules/met/service.py`.
+- [ ] Implementar la fórmula de tasa metabólica de Pandolf (Watts) con lookup del factor de terreno ($\eta$).
+- [ ] Agregar validación Pydantic en `HikerProfile` que garantice que la carga < peso corporal.
+- [ ] Verificar los cálculos contra los valores de referencia de `Formulas.md` (ej: CoT en terreno plano $\approx 2.5$ J/kg·m).
 
 ---
 
-### Issue 4: `feat(backend): implement CLI meteorology service with WBGT calculation and CLI/SIM simulations`
-* **Phase:** 4 — CLI + SIM Integración Climática
+### Issue 4: `feat(cli,sim): implementar servicio meteorológico, cálculo WBGT y escenarios de simulación`
+* **Fase:** 4 — CLI + SIM Integración Climática
 * **Labels:** `enhancement`, `status:needs-review`
 
-#### Description
-Integrate meteorological factors. Fetch live weather data (from Open-Meteo), approximate Wet Bulb Globe Temperature (WBGT) using temperature, humidity, and solar radiation, and apply velocity/cardiovascular drift degradation. Allow manual climate override via simulations and configure predefined scenarios (heavy rain, extreme heat, night, etc.).
+#### Descripción
+Integrar los factores meteorológicos. Obtener datos climáticos en tiempo real (de Open-Meteo), aproximar la Temperatura de Globo de Bulbo Húmedo (WBGT) con temperatura, humedad y radiación solar, y aplicar degradación de velocidad por estrés cardiovascular. Permitir override manual del clima mediante simulaciones y configurar los escenarios predefinidos (lluvia intensa, calor extremo, noche, etc.).
 
-#### Acceptance Criteria
-- [ ] Set up client to request current weather data from Open-Meteo API in `backend/app/modules/cli/service.py`.
-- [ ] Implement WBGT approximation formula.
-- [ ] Create `climate_zones` database table and check cache TTL.
-- [ ] Implement simulation service injecting custom climate parameters.
-- [ ] Implement the 5 predefined scenarios (`dry`, `light_rain`, `heavy_rain`, `extreme_heat`, `night`).
+#### Criterios de Aceptación
+- [ ] Configurar cliente para solicitar datos climáticos desde Open-Meteo en `backend/app/modules/cli/service.py`.
+- [ ] Implementar la fórmula de aproximación WBGT.
+- [ ] Crear tabla `climate_zones` en la DB y configurar TTL de caché.
+- [ ] Implementar el servicio de simulación que inyecte parámetros climáticos personalizados.
+- [ ] Implementar los 5 escenarios predefinidos (`dry`, `light_rain`, `heavy_rain`, `extreme_heat`, `night`).
 
 ---
 
-### Issue 5: `feat(backend): implement RIE Risk Score engine and MIDE index mapping`
-* **Phase:** 5 — RIE Índice de Riesgo y MIDE
+### Issue 5: `feat(rie): implementar motor de score de riesgo e índice MIDE`
+* **Fase:** 5 — RIE Índice de Riesgo y MIDE
 * **Labels:** `enhancement`, `status:needs-review`
 
-#### Description
-Combine physiological, velocity, and climatic variables into a single risk score per segment using AHP (Analytic Hierarchy Process) weights. Translate the aggregated risk metrics into the standard Spanish MIDE scale (1-5 across Severity, Orientation, Displacement, and Effort). Identify the top 10% highest-risk segments for warnings.
+#### Descripción
+Combinar variables fisiológicas, de velocidad y climáticas en un score de riesgo único por segmento usando pesos AHP (Proceso Analítico Jerárquico). Traducir las métricas de riesgo agregadas a la escala MIDE española estándar (1-5 en 4 dimensiones: Severidad, Orientación, Desplazamiento y Esfuerzo). Identificar el top 10% de segmentos de mayor riesgo para alertas.
 
-#### Acceptance Criteria
-- [ ] Implement Risk Score calculation per segment combining metabolic cost, velocity degradation, climate, and terrain in `backend/app/modules/rie/service.py`.
-- [ ] Configure adjustable AHP weights.
-- [ ] Implement MIDE index mapper (4 dimensions) for both segment-level and overall route level.
-- [ ] Filter and flag the top 10% highest risk segments of the route.
-- [ ] Unit tests verifying MIDE dimension constraints.
+#### Criterios de Aceptación
+- [ ] Implementar cálculo de Risk Score por segmento en `backend/app/modules/rie/service.py` combinando costo metabólico, degradación de velocidad, clima y terreno.
+- [ ] Configurar pesos AHP ajustables.
+- [ ] Implementar mapeador del índice MIDE (4 dimensiones) tanto a nivel de segmento como de ruta completa.
+- [ ] Filtrar y marcar el top 10% de segmentos de mayor riesgo de la ruta.
+- [ ] Tests unitarios que verifiquen las restricciones de las dimensiones MIDE.
 
 ---
 
-### Issue 6: `feat(backend): implement GRF pgRouting topology and dynamic routing graph`
-* **Phase:** 6 — GRF Grafo y Enrutamiento pgRouting
+### Issue 6: `feat(grf): implementar topología pgRouting y grafo de enrutamiento dinámico`
+* **Fase:** 6 — GRF Grafo y Enrutamiento pgRouting
 * **Labels:** `enhancement`, `status:needs-review`
 
-#### Description
-Build path topology and configure pgRouting. Transform route segments into edges with nodes to support network analysis. Implement dynamic routing queries using A* (or Dijkstra as fallback) with asymmetric costs (cost uphill $\neq$ cost downhill). Incorporate the climate cost multiplier as an immutable database function.
+#### Descripción
+Construir la topología de rutas y configurar pgRouting. Transformar los segmentos de ruta en aristas con nodos para soportar análisis de red. Implementar queries de enrutamiento dinámico usando A* (o Dijkstra como alternativa) con costos asimétricos (costo ascenso ≠ costo descenso). Incorporar el multiplicador climático de costo como función inmutable de la base de datos.
 
-#### Acceptance Criteria
-- [ ] Create `edges` table and run `pgr_createTopology` to build nodes.
-- [ ] Implement `climate_cost_multiplier` as `IMMUTABLE PARALLEL SAFE` SQL function with a maximum 3x multiplier cap.
-- [ ] Implement route-finding queries using A* Bidirectional in `backend/app/modules/grf/repository.py`.
-- [ ] Support intermediate waypoints and on-the-fly cost modifications.
+#### Criterios de Aceptación
+- [ ] Crear tabla `edges` y ejecutar `pgr_createTopology` para construir los nodos.
+- [ ] Implementar `climate_cost_multiplier` como función SQL `IMMUTABLE PARALLEL SAFE` con tope máximo de 3x.
+- [ ] Implementar queries de búsqueda de ruta usando A* Bidireccional en `backend/app/modules/grf/repository.py`.
+- [ ] Soportar waypoints intermedios y modificación de costos on-the-fly.
 
 ---
 
-### Issue 7: `feat(backend): expose REST endpoints for route analysis, simulations, and optimal routing`
-* **Phase:** 7 — API Endpoints REST
+### Issue 7: `feat(api): exponer endpoints REST para análisis de rutas, simulaciones y enrutamiento óptimo`
+* **Fase:** 7 — API Endpoints REST
 * **Labels:** `enhancement`, `status:needs-review`
 
-#### Description
-Expose all backend capabilities via clean FastAPI REST endpoints. This includes route upload and analysis, simulation triggers, segment data retrieval, and optimal pathfinding queries. Secure payloads with Pydantic validation schemas.
+#### Descripción
+Exponer todas las capacidades del backend via endpoints REST limpios de FastAPI. Incluye upload y análisis de rutas, triggers de simulación, recuperación de datos de segmentos y queries de pathfinding óptimo. Asegurar payloads con schemas de validación Pydantic.
 
-#### Acceptance Criteria
-- [ ] Implement `POST /routes/analyze` (handles upload, processing, and return of segments + MIDE indices).
-- [ ] Implement `POST /routes/{route_id}/simulate` to compare real vs simulated weather.
-- [ ] Implement `POST /routes/optimal-path` to run pgRouting queries between points.
-- [ ] Document all routes using OpenAPI/Swagger documentation.
+#### Criterios de Aceptación
+- [ ] Implementar `POST /routes/analyze` (maneja upload, procesamiento y retorno de segmentos + índices MIDE).
+- [ ] Implementar `POST /routes/{route_id}/simulate` para comparar clima real vs. simulado.
+- [ ] Implementar `POST /routes/optimal-path` para ejecutar queries de pgRouting entre puntos.
+- [ ] Documentar todos los endpoints usando la documentación OpenAPI/Swagger generada por FastAPI.
 
 ---
 
-### Issue 8: `feat(frontend): build MAP interactive route map and hiker profile dashboard`
-* **Phase:** 8 — MAP Mapa Web Interactivo (Vue 3)
+### Issue 8: `feat(map): construir mapa interactivo de rutas y dashboard del perfil del excursionista`
+* **Fase:** 8 — MAP Mapa Web Interactivo (Vue 3)
 * **Labels:** `enhancement`, `status:needs-review`
 
-#### Description
-Implement the final user interface. Integrate MapLibre GL JS to display routes colored by risk score (green $\rightarrow$ yellow $\rightarrow$ red). Add popups with segment details, a file uploader component, a sidebar for the hiker profile form, and climate sliders for manual weather simulation.
+#### Descripción
+Implementar la interfaz de usuario final. Integrar MapLibre GL JS para mostrar las rutas coloreadas por score de riesgo (verde → amarillo → rojo). Agregar popups con detalles de segmento, un componente de file uploader, un panel lateral con el formulario del perfil del excursionista y sliders de clima para simulación manual.
 
-#### Acceptance Criteria
-- [ ] Set up MapLibre GL JS and render route geojson segments colored by risk score.
-- [ ] Implement segment click events showing detailed metrics in a popup.
-- [ ] Add hiker profile form updating state dynamically in Pinia.
-- [ ] Integrate climate sliders trigger reactively re-running simulations.
-- [ ] Display MIDE 4-dimension indicators and flag top 10% risk segments on the map.
+#### Criterios de Aceptación
+- [ ] Configurar MapLibre GL JS y renderizar los segmentos GeoJSON de la ruta coloreados por score de riesgo.
+- [ ] Implementar eventos de click en segmentos que muestren métricas detalladas en un popup.
+- [ ] Agregar formulario de perfil del excursionista que actualice el estado en Pinia de forma dinámica.
+- [ ] Integrar sliders de clima que disparen simulaciones reactivas sin recargar la página.
+- [ ] Mostrar indicadores MIDE de 4 dimensiones y marcar el top 10% de segmentos de riesgo en el mapa.
