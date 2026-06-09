@@ -15,6 +15,7 @@ from __future__ import annotations
 import io
 import json
 import math
+import re
 from typing import Any
 
 import gpxpy
@@ -28,9 +29,16 @@ from fastapi import HTTPException, UploadFile, status
 EARTH_RADIUS_M = 6_371_000.0
 DEFAULT_SEGMENT_LENGTH_M = 100.0
 
+# GeoTIFF magic bytes (LE and BE variants of the TIFF header)
+_TIFF_MAGIC_LE = b"\x49\x49\x2a\x00"
+_TIFF_MAGIC_BE = b"\x4d\x4d\x00\x2a"
+
+MAX_DEM_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB — ST_FromGDALRaster loads the whole file
+DEM_TILE_SIZE_PX = 100                 # pixel edge length per raster tile
+
 
 # ---------------------------------------------------------------------------
-# Public entry point
+# Public entry points — routes
 # ---------------------------------------------------------------------------
 
 
@@ -59,6 +67,46 @@ async def parse_upload(file: UploadFile) -> dict[str, Any]:
         status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
         detail="Unsupported file format. Upload a .gpx or .geojson file.",
     )
+
+
+# ---------------------------------------------------------------------------
+# Public entry points — DEM (DAT-04)
+# ---------------------------------------------------------------------------
+
+
+async def read_and_validate_dem(file: UploadFile) -> bytes:
+    """
+    Read a DEM upload and validate it is a GeoTIFF.
+
+    Returns the raw bytes ready for PostGIS ingestion via ST_FromGDALRaster.
+    Raises HTTPException on format or size violations.
+    """
+    raw = await file.read()
+
+    if len(raw) > MAX_DEM_SIZE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"DEM file exceeds the {MAX_DEM_SIZE_BYTES // (1024 * 1024)} MB limit.",
+        )
+
+    if not (raw[:4] == _TIFF_MAGIC_LE or raw[:4] == _TIFF_MAGIC_BE):
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="DEM must be a GeoTIFF file (.tif / .tiff).",
+        )
+
+    return raw
+
+
+def make_dem_table_name(name: str) -> str:
+    """
+    Convert an arbitrary DEM name to a safe, predictable PostgreSQL table name.
+
+    Example: 'Copernicus DEM 30m' → 'dem_copernicus_dem_30m'
+    """
+    clean = re.sub(r"[^a-z0-9]", "_", name.lower())
+    clean = re.sub(r"_+", "_", clean).strip("_") or "raster"
+    return f"dem_{clean}"
 
 
 # ---------------------------------------------------------------------------

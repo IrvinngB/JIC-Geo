@@ -35,3 +35,27 @@ class RouteUploadResponse(BaseModel):
     segment_count: int
     total_length_m: Annotated[float, Field(description="Sum of all segment lengths in metres")]
     segments: list[SegmentOut]
+
+
+# ---------------------------------------------------------------------------
+# DEM schemas (DAT-04, DAT-09, DAT-10)
+# ---------------------------------------------------------------------------
+
+
+class DEMSourceOut(BaseModel):
+    """DEM source entry as returned by the registry."""
+
+    id: int
+    name: str
+    resolution_m: float
+    priority: int
+    rast_table: str
+
+    model_config = {"from_attributes": True}
+
+
+class DEMUploadResponse(BaseModel):
+    """Response returned after a successful DEM upload."""
+
+    dem_source: DEMSourceOut
+    tile_count: Annotated[int, Field(description="Number of 100×100 px tiles inserted")]

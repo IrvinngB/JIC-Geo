@@ -1,16 +1,21 @@
 """
-DAT router — route ingestion endpoints.
+DAT router — route and DEM ingestion endpoints.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.modules.dat import repository as dat_repo
 from app.modules.dat import service as dat_service
-from app.modules.dat.schemas import RouteUploadResponse, SegmentOut
+from app.modules.dat.schemas import DEMSourceOut, DEMUploadResponse, RouteUploadResponse, SegmentOut
+
+# ---------------------------------------------------------------------------
+# Routes router
+# ---------------------------------------------------------------------------
 
 router = APIRouter()
 
@@ -51,4 +56,52 @@ async def upload_route(
         segment_count=len(segments_out),
         total_length_m=round(total_length, 1),
         segments=segments_out,
+    )
+
+
+# ---------------------------------------------------------------------------
+# DEM router (DAT-04, DAT-09, DAT-10)
+# ---------------------------------------------------------------------------
+
+dem_router = APIRouter()
+
+
+@dem_router.post("/upload", response_model=DEMUploadResponse, status_code=201)
+async def upload_dem(
+    file: UploadFile = File(..., description="GeoTIFF DEM file (.tif / .tiff)"),
+    name: str = Form(..., description="Unique identifier for this DEM source"),
+    resolution_m: float = Form(..., gt=0, description="Native spatial resolution in metres"),
+    priority: int = Form(default=0, description="Higher value = preferred when DEMs overlap (DAT-10)"),
+    db: AsyncSession = Depends(get_db),
+) -> DEMUploadResponse:
+    """
+    Upload a GeoTIFF DEM and register it as a queryable PostGIS raster source.
+
+    - Validates the file is a GeoTIFF (magic bytes check).
+    - Creates a dedicated raster table named after the DEM.
+    - Tiles the raster at 100×100 px for efficient spatial queries.
+    - Adds a GIST index on ST_ConvexHull(rast).
+    - Registers metadata in the dem_sources registry (DAT-09, DAT-10).
+    """
+    raw = await dat_service.read_and_validate_dem(file)
+    rast_table = dat_service.make_dem_table_name(name)
+
+    try:
+        source, tile_count = await dat_repo.save_dem(
+            db,
+            name=name,
+            rast_table=rast_table,
+            resolution_m=resolution_m,
+            priority=priority,
+            file_bytes=raw,
+        )
+    except IntegrityError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A DEM source named '{name}' already exists.",
+        )
+
+    return DEMUploadResponse(
+        dem_source=DEMSourceOut.model_validate(source),
+        tile_count=tile_count,
     )
