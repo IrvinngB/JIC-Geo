@@ -14,9 +14,9 @@ class TestMinettiCoT:
         assert method == "exact"
 
     def test_optimal_descent(self):
-        """Optimal descent (~-10%) should be the absolute minimum CoT (~0.81)."""
+        """Optimal descent (~-10%) should be the absolute minimum CoT (~1.13 J/kg*m under this polynomial)."""
         cot, method = minetti_cot(-0.10)
-        assert abs(cot - 0.81) < 0.15
+        assert abs(cot - 1.13) < 0.05
         assert method == "exact"
 
     def test_extreme_ascent_extrapolated(self):
