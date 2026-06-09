@@ -126,6 +126,7 @@ A `Makefile` is configured in the root to automate common tasks:
 ## Internal Documentation References
 
 For specific details regarding formulas, optimizations, and issues:
+* **Architecture Rules:** [architecture.md](file:///Users/Irvinng/Developer/Proyectos/JIC-Geo/docs/architecture.md)
 * **Requirements & Specs:** [Requerimientos.md](file:///Users/Irvinng/Developer/Proyectos/JIC-Geo/docs/Requerimientos.md)
 * **Mathematical & Biomechanical Formulas:** [Formulas.md](file:///Users/Irvinng/Developer/Proyectos/JIC-Geo/docs/Formulas.md)
 * **Optimization & PostGIS Mitigations:** [mitigacion.md](file:///Users/Irvinng/Developer/Proyectos/JIC-Geo/docs/mitigacion.md)
