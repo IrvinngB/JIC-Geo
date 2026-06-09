@@ -1,0 +1,9 @@
+# DEM data files
+*.tif
+*.img
+*.hgt
+*.adf
+
+# Sample GPX/GeoJSON files (add manually)
+*.gpx
+*.geojson
