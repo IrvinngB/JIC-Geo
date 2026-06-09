@@ -107,6 +107,98 @@ Si preferís correr la base de datos de forma nativa con Homebrew:
 
 ---
 
+## Instalación Nativa (Linux — Ubuntu / Debian)
+
+Si estás en Linux y preferís no usar Docker:
+
+1. **Agregar el repositorio de PostgreSQL:**
+   ```bash
+   sudo apt install -y curl ca-certificates
+   curl https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+   echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+     | sudo tee /etc/apt/sources.list.d/pgdg.list
+   sudo apt update
+   ```
+
+2. **Instalar PostgreSQL 16, PostGIS y pgRouting:**
+   ```bash
+   sudo apt install -y postgresql-16 postgresql-16-postgis-3 postgresql-16-pgrouting
+   ```
+
+3. **Iniciar el servicio:**
+   ```bash
+   sudo systemctl enable --now postgresql
+   ```
+
+4. **Inicializar la base de datos:**
+   ```bash
+   sudo -u postgres createdb jicgeo
+   sudo -u postgres psql jicgeo -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+   sudo -u postgres psql jicgeo -c "CREATE EXTENSION IF NOT EXISTS postgis_raster;"
+   sudo -u postgres psql jicgeo -c "CREATE EXTENSION IF NOT EXISTS pgrouting;"
+   ```
+
+5. **Verificar las instalaciones:**
+   ```bash
+   sudo -u postgres psql jicgeo -c "SELECT postgis_full_version();"
+   sudo -u postgres psql jicgeo -c "SELECT pgr_version();"
+   ```
+
+> **Nota:** Para conectarte sin `sudo -u postgres`, configurá un usuario de PostgreSQL propio:
+> ```bash
+> sudo -u postgres createuser --superuser $USER
+> ```
+
+---
+
+## Instalación Nativa (Windows)
+
+> **Recomendación fuerte:** usá **WSL2** (Windows Subsystem for Linux). Es el camino más sencillo y evita problemas de compatibilidad con `make` y herramientas de terminal.
+
+### Opción A — WSL2 (Recomendado)
+
+1. **Instalar WSL2** desde PowerShell (admin):
+   ```powershell
+   wsl --install
+   ```
+   Esto instala Ubuntu por defecto. Reiniciá cuando lo pida.
+
+2. **Dentro de WSL2**, seguí los mismos pasos de la sección **Linux** arriba.
+
+3. Para correr Docker Desktop desde WSL2, activá la integración en **Docker Desktop → Settings → Resources → WSL Integration**.
+
+### Opción B — Windows Nativo
+
+> ⚠️ `make` no está disponible en Windows nativo. Necesitás instalar `make` via [Chocolatey](https://chocolatey.org/) o usar los comandos equivalentes directamente.
+
+1. **Instalar `make`** (PowerShell admin):
+   ```powershell
+   choco install make
+   ```
+
+2. **Instalar PostgreSQL 16** desde el instalador oficial:
+   [https://www.postgresql.org/download/windows/](https://www.postgresql.org/download/windows/)
+   - Durante la instalación, incluir Stack Builder.
+   - Desde Stack Builder, instalar **PostGIS** y **pgRouting** para PostgreSQL 16.
+
+3. **Inicializar la base de datos** desde la terminal de PostgreSQL (psql) o pgAdmin:
+   ```sql
+   CREATE DATABASE jicgeo;
+   \c jicgeo
+   CREATE EXTENSION IF NOT EXISTS postgis;
+   CREATE EXTENSION IF NOT EXISTS postgis_raster;
+   CREATE EXTENSION IF NOT EXISTS pgrouting;
+   ```
+
+4. **Instalar Node.js** (para el frontend) desde [https://nodejs.org/](https://nodejs.org/).
+
+5. **Instalar Python 3.12** desde [https://www.python.org/](https://www.python.org/) e instalar `uv`:
+   ```powershell
+   pip install uv
+   ```
+
+---
+
 ## Comandos de Desarrollo
 
 El `Makefile` en la raíz automatiza las tareas más comunes:
