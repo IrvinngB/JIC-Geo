@@ -11,7 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.modules.dat import repository as dat_repo
 from app.modules.dat import service as dat_service
-from app.modules.dat.schemas import DEMSourceOut, DEMUploadResponse, RouteUploadResponse, SegmentOut
+from app.modules.dat.schemas import DEMSourceOut, DEMUploadResponse, RouteOut, RouteUploadResponse, SegmentOut
+from app.db.models import Route
 
 # ---------------------------------------------------------------------------
 # Routes router
@@ -57,6 +58,77 @@ async def upload_route(
         total_length_m=round(total_length, 1),
         segments=segments_out,
     )
+
+
+@router.get("/{route_id}", response_model=RouteOut)
+async def get_route(
+    route_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> RouteOut:
+    """
+    Retrieve a persisted route by its UUID, including all segments.
+    """
+    from uuid import UUID
+    try:
+        route_uuid = UUID(route_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid route_id format. Must be a valid UUID.",
+        )
+
+    route = await dat_repo.get_route(db, route_uuid)
+    if route is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Route '{route_id}' not found.",
+        )
+
+    segments_out = [
+        SegmentOut.model_validate(seg)
+        for seg in sorted(route.segments, key=lambda s: s.seq)
+    ]
+    total_length = sum(s.length_m for s in route.segments if s.length_m is not None)
+
+    return RouteOut(
+        id=route.id,
+        name=route.name,
+        source_format=route.source_format,
+        uploaded_at=str(route.uploaded_at),
+        segment_count=len(segments_out),
+        total_length_m=round(total_length, 1),
+        segments=segments_out,
+    )
+
+
+@router.get("/{route_id}/segments", response_model=list[SegmentOut])
+async def get_route_segments(
+    route_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> list[SegmentOut]:
+    """
+    Get all segments of a route with their attributes (API-05).
+    """
+    from uuid import UUID
+    try:
+        route_uuid = UUID(route_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid route_id format. Must be a valid UUID.",
+        )
+
+    route = await dat_repo.get_route(db, route_uuid)
+    if route is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Route '{route_id}' not found.",
+        )
+
+    return [
+        SegmentOut.model_validate(seg)
+        for seg in sorted(route.segments, key=lambda s: s.seq)
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -105,3 +177,14 @@ async def upload_dem(
         dem_source=DEMSourceOut.model_validate(source),
         tile_count=tile_count,
     )
+
+
+@dem_router.get("/sources", response_model=list[DEMSourceOut])
+async def list_dem_sources(
+    db: AsyncSession = Depends(get_db),
+) -> list[DEMSourceOut]:
+    """
+    List all registered DEM sources (DAT-10).
+    """
+    sources = await dat_repo.list_dem_sources(db)
+    return [DEMSourceOut.model_validate(s) for s in sources]

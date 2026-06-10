@@ -37,6 +37,20 @@ class RouteUploadResponse(BaseModel):
     segments: list[SegmentOut]
 
 
+class RouteOut(BaseModel):
+    """Full route representation with its segments."""
+
+    id: uuid.UUID
+    name: str | None
+    source_format: str
+    uploaded_at: str
+    segment_count: int
+    total_length_m: float
+    segments: list[SegmentOut]
+
+    model_config = {"from_attributes": True}
+
+
 # ---------------------------------------------------------------------------
 # DEM schemas (DAT-04, DAT-09, DAT-10)
 # ---------------------------------------------------------------------------

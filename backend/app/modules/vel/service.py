@@ -40,21 +40,50 @@ def apply_langmuir(velocity_kmh: float, slope_deg: float, is_descent: bool) -> f
       Steep descent  (>12°):   +10 min per 300 m → speed decrease
     Returns adjusted velocity in km/h.
     """
-    # TODO: implement full Langmuir time-based correction
-    # Placeholder: return unmodified until Phase 3
-    return velocity_kmh
+    if not is_descent:
+        return velocity_kmh
+
+    if 5.0 <= slope_deg <= 12.0:
+        correction_per_300m = -10.0  # minutes saved
+    elif slope_deg > 12.0:
+        correction_per_300m = +10.0  # minutes added
+    else:
+        return velocity_kmh
+
+    # Convert to hours per 300 m
+    correction_hours_per_300m = correction_per_300m / 60.0
+
+    # For a segment at velocity_kmh, time to travel 0.3 km
+    base_time_h = 0.3 / velocity_kmh
+    adjusted_time_h = base_time_h + correction_hours_per_300m
+
+    # Prevent non-positive time
+    if adjusted_time_h <= 0:
+        return velocity_kmh
+
+    return 0.3 / adjusted_time_h
+
+
+def _slope_pct_to_deg(slope_pct: float) -> float:
+    """Convert gradient (Δh/Δx) to degrees."""
+    return math.degrees(math.atan(slope_pct))
 
 
 def calculate_velocity(
     slope: float,
     model: VelocityModel = VelocityModel.TOBLER,
     is_on_path: bool = True,
+    apply_langmuir_correction: bool = True,
 ) -> float:
     """
-    Dispatch to the selected velocity model.
+    Dispatch to the selected velocity model and apply Langmuir if needed.
     Returns velocity in km/h.
-    VEL-03, VEL-06
+    VEL-03, VEL-05, VEL-06
     """
-    if model == VelocityModel.TOBLER:
-        return tobler(slope, is_on_path)
-    return irmischer_clarke(slope)
+    base = tobler(slope, is_on_path) if model == VelocityModel.TOBLER else irmischer_clarke(slope)
+
+    if apply_langmuir_correction and slope < 0:
+        slope_deg = _slope_pct_to_deg(abs(slope))
+        base = apply_langmuir(base, slope_deg, is_descent=True)
+
+    return base

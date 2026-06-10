@@ -5,21 +5,25 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from app.config import settings
 from app.db.session import get_db
 from app.main import app
 
-# Create test engine using the same DB
+# Create test engine with NullPool to avoid connection sharing issues
 test_engine = create_async_engine(
     settings.database_url,
     echo=False,
+    poolclass=NullPool,
 )
 
 TestSessionLocal = async_sessionmaker(
     test_engine,
     class_=AsyncSession,
     expire_on_commit=False,
+    autocommit=False,
+    autoflush=False,
 )
 
 
@@ -33,7 +37,7 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         transaction = await connection.begin()
         session = AsyncSession(
             bind=connection,
-            join_transaction_mode="rollback_only",
+            join_transaction_mode="create_savepoint",
             expire_on_commit=False,
         )
 
