@@ -15,6 +15,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.db.session import get_db
+from app.modules.cli import repository as cli_repo
+from app.modules.cli.schemas import ClimateData, ClimateOverride
+from app.modules.cli.service import climate_from_override
 from app.modules.met import repository as met_repo
 from app.modules.met.service import (
     estimate_time_to_severe_fatigue_h,
@@ -26,7 +29,17 @@ from app.modules.met.service import (
 )
 from app.modules.prf.schemas import HikerProfile
 from app.modules.prf.service import velocity_factor
+from app.modules.rie import repository as rie_repo
+from app.modules.rie.schemas import ClimateFactors, MideDimensions, RiskWeights
+from app.modules.rie.service import (
+    SegmentRiskInput,
+    calculate_segment_risk,
+    mark_top_risk,
+    summarize_route_risk,
+)
 from app.modules.rut import repository as rut_repo
+from app.modules.sim.schemas import SimulationRequest
+from app.modules.sim.service import resolve_simulation_climate
 from app.modules.vel.service import VelocityModel, calculate_velocity
 
 router = APIRouter()
@@ -54,6 +67,10 @@ class BiomechanicalSegmentOut(BaseModel):
     is_on_path: bool
     time_min: float
     kcal: float
+    risk_score: int
+    is_top_risk: bool
+    mide_dimensions: MideDimensions | None = None
+    climate_factors: ClimateFactors | None = None
     geom: dict[str, Any] | None = None
 
 
@@ -68,6 +85,11 @@ class BiomechanicalSummary(BaseModel):
     high_confidence_segments_pct: float
     time_to_severe_fatigue_h: float | None
     mide_effort_level: int  # 1-5 based on total effort
+    mide_global: int
+    mide_dimensions: MideDimensions
+    ccr: float
+    climate_source: str
+    climate_timestamp: str | None
 
 
 class BiomechanicalRequest(BaseModel):
@@ -76,6 +98,7 @@ class BiomechanicalRequest(BaseModel):
     profile: HikerProfile = Field(default_factory=HikerProfile)
     velocity_model: VelocityModel = VelocityModel.TOBLER
     segment_length_m: float = Field(default=settings.segment_length_m, gt=0)
+    climate: ClimateOverride | None = None
 
 
 class BiomechanicalResponse(BaseModel):
@@ -106,6 +129,57 @@ async def analyze_biomechanical(
     - Computes metabolic cost (Minetti + Pandolf).
     - Returns segment-level and route-level summaries.
     """
+    return await _analyze_route(db, route_id, payload)
+
+
+@router.post("/{route_id}/simulate", response_model=BiomechanicalResponse)
+async def simulate_route(
+    route_id: str,
+    payload: SimulationRequest,
+    db: AsyncSession = DB_DEPENDENCY,
+) -> BiomechanicalResponse:
+    """Analyze a route with simulated climate. SIM-01 to SIM-04, API-04"""
+    override = resolve_simulation_climate(payload.scenario, payload.climate)
+    request = BiomechanicalRequest(
+        profile=payload.profile,
+        velocity_model=payload.velocity_model,
+        climate=override,
+    )
+    return await _analyze_route(db, route_id, request)
+
+
+async def _resolve_climate(
+    db: AsyncSession,
+    route_uuid: uuid.UUID,
+    override: ClimateOverride | None,
+) -> ClimateData:
+    if override is not None:
+        return climate_from_override(override)
+
+    centroid = await cli_repo.get_route_centroid(db, str(route_uuid))
+    if centroid is None:
+        return climate_from_override(
+            ClimateOverride(temperature_c=25, humidity_pct=50, precip_mm=0, uv_index=3)
+        )
+    lat, lon = centroid
+    cached = await cli_repo.get_cached_climate(db, lat, lon)
+    if cached is not None:
+        return cached
+    try:
+        climate = await cli_repo.fetch_open_meteo(lat, lon)
+    except Exception:
+        climate = climate_from_override(
+            ClimateOverride(temperature_c=25, humidity_pct=50, precip_mm=0, uv_index=3)
+        )
+    await cli_repo.upsert_climate_zone(db, climate, lat, lon)
+    return climate
+
+
+async def _analyze_route(
+    db: AsyncSession,
+    route_id: str,
+    payload: BiomechanicalRequest,
+) -> BiomechanicalResponse:
     try:
         route_uuid = uuid.UUID(route_id)
     except ValueError:
@@ -134,14 +208,26 @@ async def analyze_biomechanical(
     profile = payload.profile
     v_factor = velocity_factor(profile)
 
+    climate = await _resolve_climate(db, route_uuid, payload.climate)
+    risk_weights = RiskWeights(
+        metabolic_cost=settings.ahp_metabolic_cost,
+        velocity_degradation=settings.ahp_velocity_degradation,
+        climate_stress=settings.ahp_climate_stress,
+        terrain_friction=settings.ahp_terrain_friction,
+    )
+
     segments_out: list[BiomechanicalSegmentOut] = []
     costs_to_persist: list[dict[str, Any]] = []
+    risk_scores_by_segment_id: dict[int, int] = {}
+    risk_scores_by_seq: dict[int, int] = {}
     total_kcal = 0.0
     total_time_h = 0.0
     total_distance_km = 0.0
     elevation_gain = 0.0
     elevation_loss = 0.0
     exact_segments = 0
+    elapsed_time_min = 0.0
+    off_path_count = 0
 
     for seg in segments_db:
         slope = seg.slope_pct or 0.0
@@ -160,6 +246,12 @@ async def analyze_biomechanical(
             apply_langmuir_correction=True,
         )
         velocity_kmh *= v_factor
+        baseline_velocity_kmh = calculate_velocity(
+            slope=slope,
+            model=payload.velocity_model,
+            is_on_path=True,
+            apply_langmuir_correction=True,
+        )
 
         # Time
         time_h = length_km / velocity_kmh if velocity_kmh > 0 else 0.0
@@ -203,6 +295,27 @@ async def analyze_biomechanical(
 
         # Eccentric fatigue
         is_eccentric = is_eccentric_fatigue(slope)
+        risk_score, climate_factors = calculate_segment_risk(
+            SegmentRiskInput(
+                seq=seg.seq,
+                slope_pct=slope,
+                velocity_kmh=velocity_kmh,
+                baseline_velocity_kmh=baseline_velocity_kmh,
+                cot_j_per_kg_m=cot_j_per_kg_m,
+                metabolic_rate_w=metabolic_rate_w,
+                elapsed_time_min=elapsed_time_min,
+                segment_time_min=time_min,
+                canopy_density=seg.canopy_density or 0.5,
+                surface_type=surface_type,
+                is_on_path=is_on_path,
+                wbgt=climate.wbgt,
+                precip_mm=climate.precip_mm,
+                uv_index=climate.uv_index,
+            ),
+            risk_weights,
+        )
+        risk_scores_by_segment_id[seg.id] = risk_score
+        risk_scores_by_seq[seg.seq] = risk_score
 
         # Accumulate
         total_kcal += kcal
@@ -214,6 +327,8 @@ async def analyze_biomechanical(
             elevation_loss += abs(length_m * slope)
         if cot_method == "exact":
             exact_segments += 1
+        if not is_on_path:
+            off_path_count += 1
 
         segments_out.append(
             BiomechanicalSegmentOut(
@@ -230,11 +345,15 @@ async def analyze_biomechanical(
                 is_on_path=is_on_path,
                 time_min=round(time_min, 2),
                 kcal=round(kcal, 1),
+                risk_score=risk_score,
+                is_top_risk=False,
+                climate_factors=climate_factors,
                 geom=json.loads(segment_geojson_by_id[seg.id])
                 if seg.id in segment_geojson_by_id
                 else None,
             )
         )
+        elapsed_time_min += time_min
 
     high_confidence_pct = (exact_segments / len(segments_db)) * 100 if segments_db else 0
     time_to_severe_fatigue_h = estimate_time_to_severe_fatigue_h(
@@ -245,6 +364,7 @@ async def analyze_biomechanical(
     )
 
     await met_repo.upsert_segment_costs(db, costs_to_persist)
+    await rie_repo.update_segment_risk_scores(db, risk_scores_by_segment_id)
 
     # MIDE effort level: map estimated time to 1-5 scale
     # <1h → 1, 1-3h → 2, 3-5h → 3, 5-8h → 4, >8h → 5
@@ -260,6 +380,26 @@ async def analyze_biomechanical(
     else:
         effort_level = 5
 
+    top_risk_seqs = mark_top_risk(risk_scores_by_seq)
+    off_path_ratio = off_path_count / len(segments_db) if segments_db else 0.0
+    route_risk = summarize_route_risk(
+        scores_by_seq=risk_scores_by_seq,
+        max_abs_slope=max((abs(seg.slope_pct or 0.0) for seg in segments_db), default=0.0),
+        off_path_ratio=off_path_ratio,
+        total_time_h=total_time_h,
+        wbgt=climate.wbgt,
+        total_length_m=total_distance_km * 1000.0,
+    )
+    segments_out = [
+        segment.model_copy(
+            update={
+                "is_top_risk": segment.seq in top_risk_seqs,
+                "mide_dimensions": route_risk.mide_dimensions,
+            }
+        )
+        for segment in segments_out
+    ]
+
     summary = BiomechanicalSummary(
         total_distance_km=round(total_distance_km, 2),
         elevation_gain_m=round(elevation_gain, 1),
@@ -271,6 +411,11 @@ async def analyze_biomechanical(
             round(time_to_severe_fatigue_h, 2) if time_to_severe_fatigue_h is not None else None
         ),
         mide_effort_level=effort_level,
+        mide_global=route_risk.mide_global,
+        mide_dimensions=route_risk.mide_dimensions,
+        ccr=route_risk.ccr,
+        climate_source=climate.source,
+        climate_timestamp=climate.timestamp.isoformat() if climate.timestamp else None,
     )
 
     return BiomechanicalResponse(
