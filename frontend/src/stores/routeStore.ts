@@ -133,6 +133,25 @@ interface BiomechanicalResponse {
   }>;
 }
 
+interface SimulationResponse {
+  simulated: BiomechanicalResponse;
+  real: BiomechanicalResponse | null;
+}
+
+/** SIM-04: key metrics of one climate scenario, used for real vs simulated diff. */
+export interface ClimateScenarioMetrics {
+  mide_global: number;
+  total_kcal: number;
+  estimated_time_h: number;
+  ccr: number;
+  climate_source: "api" | "simulation";
+}
+
+export interface ClimateComparison {
+  real: ClimateScenarioMetrics;
+  simulated: ClimateScenarioMetrics;
+}
+
 export type SimulationScenario =
   | "dry"
   | "light_rain"
@@ -164,6 +183,18 @@ function mapBackendSegment(
   };
 }
 
+function scenarioMetrics(
+  response: BiomechanicalResponse,
+): ClimateScenarioMetrics {
+  return {
+    mide_global: response.summary.mide_global,
+    total_kcal: response.summary.total_kcal,
+    estimated_time_h: response.summary.estimated_time_h,
+    ccr: response.summary.ccr,
+    climate_source: response.summary.climate_source,
+  };
+}
+
 export const useRouteStore = defineStore("route", () => {
   const analysis = ref<RouteAnalysis | null>(null);
   const isLoading = ref(false);
@@ -171,6 +202,7 @@ export const useRouteStore = defineStore("route", () => {
   const selectedSegmentSeq = ref<number | null>(null);
   const isSimulationMode = ref(false);
   const currentProfile = ref<HikerProfile | null>(null);
+  const climateComparison = ref<ClimateComparison | null>(null);
 
   const selectedSegment = computed(
     () =>
@@ -298,10 +330,14 @@ export const useRouteStore = defineStore("route", () => {
     isLoading.value = true;
     error.value = null;
     try {
-      const body =
-        typeof climate === "string"
-          ? { scenario: climate, profile: currentProfile.value ?? undefined }
-          : { climate, profile: currentProfile.value ?? undefined };
+      const scenarioBody =
+        typeof climate === "string" ? { scenario: climate } : { climate };
+      const body = {
+        ...scenarioBody,
+        profile: currentProfile.value ?? undefined,
+        // SIM-04: ask the backend for the real-climate baseline in the same call.
+        compare_with_real: true,
+      };
       const response = await fetch(
         `${API_BASE}/routes/${analysis.value.route_id}/simulate`,
         {
@@ -314,7 +350,14 @@ export const useRouteStore = defineStore("route", () => {
       if (!response.ok)
         throw new Error(`Simulation failed: ${await parseApiError(response)}`);
 
-      const simulated = (await response.json()) as BiomechanicalResponse;
+      const result = (await response.json()) as SimulationResponse;
+      const simulated = result.simulated;
+      climateComparison.value = result.real
+        ? {
+            real: scenarioMetrics(result.real),
+            simulated: scenarioMetrics(simulated),
+          }
+        : null;
       analysis.value = {
         ...analysis.value,
         summary: {
@@ -380,6 +423,7 @@ export const useRouteStore = defineStore("route", () => {
         segments: simulated.segments.map((segment) => mapBackendSegment(segment)),
       };
       isSimulationMode.value = false;
+      climateComparison.value = null;
     } catch (err) {
       error.value =
         err instanceof Error
@@ -400,6 +444,7 @@ export const useRouteStore = defineStore("route", () => {
     selectedSegmentSeq.value = null;
     isSimulationMode.value = false;
     currentProfile.value = null;
+    climateComparison.value = null;
   }
 
   return {
@@ -409,6 +454,7 @@ export const useRouteStore = defineStore("route", () => {
     selectedSegment,
     highRiskSegments,
     isSimulationMode,
+    climateComparison,
     uploadAndAnalyze,
     runSimulation,
     refreshRealClimate,

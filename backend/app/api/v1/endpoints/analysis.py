@@ -109,6 +109,17 @@ class BiomechanicalResponse(BaseModel):
     segments: list[BiomechanicalSegmentOut]
 
 
+class SimulationResponse(BaseModel):
+    """SIM-04: simulated-climate result, optionally paired with the real-climate one.
+
+    `real` is populated only when the request sets `compare_with_real=true`, so a
+    single call returns both scenarios for side-by-side comparison.
+    """
+
+    simulated: BiomechanicalResponse
+    real: BiomechanicalResponse | None = None
+
+
 # ---------------------------------------------------------------------------
 # Endpoint
 # ---------------------------------------------------------------------------
@@ -132,20 +143,34 @@ async def analyze_biomechanical(
     return await _analyze_route(db, route_id, payload)
 
 
-@router.post("/{route_id}/simulate", response_model=BiomechanicalResponse)
+@router.post("/{route_id}/simulate", response_model=SimulationResponse)
 async def simulate_route(
     route_id: str,
     payload: SimulationRequest,
     db: AsyncSession = DB_DEPENDENCY,
-) -> BiomechanicalResponse:
+) -> SimulationResponse:
     """Analyze a route with simulated climate. SIM-01 to SIM-04, API-04"""
     override = resolve_simulation_climate(payload.scenario, payload.climate)
-    request = BiomechanicalRequest(
+
+    # SIM-04: when requested, compute the real-climate baseline FIRST so that the
+    # persisted segment costs end in the simulated state the user is viewing.
+    real_response: BiomechanicalResponse | None = None
+    if payload.compare_with_real:
+        real_request = BiomechanicalRequest(
+            profile=payload.profile,
+            velocity_model=payload.velocity_model,
+            climate=None,
+        )
+        real_response = await _analyze_route(db, route_id, real_request)
+
+    simulated_request = BiomechanicalRequest(
         profile=payload.profile,
         velocity_model=payload.velocity_model,
         climate=override,
     )
-    return await _analyze_route(db, route_id, request)
+    simulated_response = await _analyze_route(db, route_id, simulated_request)
+
+    return SimulationResponse(simulated=simulated_response, real=real_response)
 
 
 async def _resolve_climate(

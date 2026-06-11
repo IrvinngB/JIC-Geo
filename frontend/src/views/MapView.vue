@@ -18,7 +18,8 @@ const { currentTheme, toggleTheme } = useTheme()
 const { profile, isValid } = useHikerProfile()
 const simulation = useSimulation()
 const routeStore = useRouteStore()
-const { analysis, error, isLoading, selectedSegment } = storeToRefs(routeStore)
+const { analysis, error, isLoading, selectedSegment, climateComparison } =
+  storeToRefs(routeStore)
 
 // On mobile the side panel becomes a bottom sheet. This drives its open state;
 // on desktop (md+) it is ignored because the panel is a static sidebar.
@@ -158,6 +159,7 @@ async function applyScenario(scenario: SimulationScenario): Promise<void> {
           v-if="analysis && simulationMode"
           :model-value="simulation.climate"
           :disabled="isLoading"
+          :comparison="climateComparison"
           @update:model-value="updateClimate"
           @scenario="applyScenario"
           @run="simulation.runSimulation"
