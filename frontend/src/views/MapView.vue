@@ -5,19 +5,31 @@ import RouteMap from '@/components/map/RouteMap.vue'
 import HikerProfileForm from '@/components/sidebar/HikerProfileForm.vue'
 import RouteSummary from '@/components/sidebar/RouteSummary.vue'
 import FileUploader from '@/components/upload/FileUploader.vue'
+import ClimateSliders from '@/components/simulation/ClimateSliders.vue'
+import ClimateToggle from '@/components/simulation/ClimateToggle.vue'
 import { useHikerProfile } from '@/composables/useHikerProfile'
+import { useSimulation } from '@/composables/useSimulation'
 import { useTheme } from '@/composables/useTheme'
 import { useRouteStore } from '@/stores/routeStore'
+import type { ClimateOverride, SimulationScenario } from '@/stores/routeStore'
 import type { HikerProfile } from '@/composables/useHikerProfile'
 
 const { currentTheme, toggleTheme } = useTheme()
 const { profile, isValid } = useHikerProfile()
+const simulation = useSimulation()
 const routeStore = useRouteStore()
 const { analysis, error, isLoading, selectedSegment } = storeToRefs(routeStore)
 
 // On mobile the side panel becomes a bottom sheet. This drives its open state;
 // on desktop (md+) it is ignored because the panel is a static sidebar.
 const sheetOpen = ref(false)
+const simulationMode = computed({
+  get: () => simulation.isSimulationMode.value,
+  set: (value: boolean) => {
+    simulation.isSimulationMode.value = value
+    if (!value) void simulation.switchToRealData()
+  },
+})
 
 // Raise the sheet automatically when a segment is selected so its detail is
 // visible without an extra tap.
@@ -69,6 +81,15 @@ function directionLabel(direction: string): string {
 
 async function analyzeRoute(file: File, selectedProfile: HikerProfile): Promise<void> {
   await routeStore.uploadAndAnalyze(file, selectedProfile)
+}
+
+function updateClimate(value: ClimateOverride): void {
+  Object.assign(simulation.climate, value)
+}
+
+async function applyScenario(scenario: SimulationScenario): Promise<void> {
+  simulation.applyScenario(scenario)
+  await simulation.runSimulation()
 }
 </script>
 
@@ -126,6 +147,21 @@ async function analyzeRoute(file: File, selectedProfile: HikerProfile): Promise<
         </div>
 
         <RouteSummary :analysis="analysis" />
+
+        <ClimateToggle
+          v-if="analysis"
+          v-model="simulationMode"
+          :disabled="isLoading"
+        />
+
+        <ClimateSliders
+          v-if="analysis && simulationMode"
+          :model-value="simulation.climate"
+          :disabled="isLoading"
+          @update:model-value="updateClimate"
+          @scenario="applyScenario"
+          @run="simulation.runSimulation"
+        />
 
         <section v-if="selectedSegment" class="card bg-base-100 shadow-md">
           <div class="card-body p-4 text-sm">

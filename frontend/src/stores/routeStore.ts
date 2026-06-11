@@ -1,7 +1,6 @@
 /**
- * Pinia store — route analysis state.
- * Uses the Phase 1–3 backend flow:
- * upload → process → biomechanical analysis.
+ * Pinia store - route analysis state.
+ * Uses the backend flow: upload -> process -> biomechanical/risk analysis.
  */
 
 import { computed, ref } from "vue";
@@ -25,10 +24,23 @@ export interface RouteSummary {
   high_confidence_segments_pct: number;
   points_corrected: number;
   time_to_severe_fatigue_h: number | null;
+  ccr: number;
   mide_global: number;
   mide_dimensions: MideDimensions;
   climate_source: "pending" | "api" | "simulation";
   climate_timestamp: string | null;
+}
+
+export interface ClimateFactors {
+  wbgt: number;
+  precip_mm: number;
+  uv_index: number;
+  cardiovascular_multiplier: number;
+  climate_cost_multiplier: number;
+  fc_precipitation: number;
+  fc_erodability: number;
+  fc_anegamiento: number;
+  fc_brillo_solar: number;
 }
 
 export interface Segment {
@@ -47,6 +59,8 @@ export interface Segment {
   kcal: number;
   risk_score: number;
   is_top_risk: boolean;
+  mide_dimensions?: MideDimensions;
+  climate_factors?: ClimateFactors;
   geom?: LineString;
 }
 
@@ -56,6 +70,13 @@ export interface RouteAnalysis {
   source_format: string;
   summary: RouteSummary;
   segments: Segment[];
+}
+
+export interface ClimateOverride {
+  temperature_c: number;
+  humidity_pct: number;
+  precip_mm: number;
+  uv_index: number;
 }
 
 interface UploadResponse {
@@ -84,6 +105,11 @@ interface BiomechanicalResponse {
     high_confidence_segments_pct: number;
     time_to_severe_fatigue_h: number | null;
     mide_effort_level: number;
+    mide_global: number;
+    mide_dimensions: MideDimensions;
+    ccr: number;
+    climate_source: "api" | "simulation";
+    climate_timestamp: string | null;
   };
   segments: Array<{
     seq: number;
@@ -99,6 +125,10 @@ interface BiomechanicalResponse {
     is_on_path: boolean;
     time_min: number;
     kcal: number;
+    risk_score: number;
+    is_top_risk: boolean;
+    mide_dimensions?: MideDimensions;
+    climate_factors?: ClimateFactors;
     geom: LineString | null;
   }>;
 }
@@ -122,34 +152,16 @@ async function parseApiError(response: Response): Promise<string> {
   }
 }
 
-function calculateRiskScore(
+function mapBackendSegment(
   segment: BiomechanicalResponse["segments"][number],
-): number {
-  const slopeRisk = Math.min(Math.abs(segment.slope_pct) * 140, 45);
-  const metabolicRisk = Math.min(segment.metabolic_rate_w / 12, 35);
-  const fatigueRisk = segment.is_eccentric_fatigue ? 15 : 0;
-  const offPathRisk = segment.is_on_path ? 0 : 10;
-  return Math.min(
-    100,
-    Math.round(slopeRisk + metabolicRisk + fatigueRisk + offPathRisk),
-  );
-}
-
-function markTopRiskSegments(segments: Segment[]): Segment[] {
-  if (segments.length === 0) return segments;
-
-  const topCount = Math.max(1, Math.ceil(segments.length * 0.1));
-  const topSeqs = new Set(
-    [...segments]
-      .sort((a, b) => b.risk_score - a.risk_score)
-      .slice(0, topCount)
-      .map((segment) => segment.seq),
-  );
-
-  return segments.map((segment) => ({
+  interpolatedBySeq?: Map<number, boolean>,
+): Segment {
+  return {
     ...segment,
-    is_top_risk: topSeqs.has(segment.seq),
-  }));
+    geom: segment.geom ?? undefined,
+    is_eccentric_fatigue:
+      segment.is_eccentric_fatigue || Boolean(interpolatedBySeq?.get(segment.seq)),
+  };
 }
 
 export const useRouteStore = defineStore("route", () => {
@@ -158,6 +170,7 @@ export const useRouteStore = defineStore("route", () => {
   const error = ref<string | null>(null);
   const selectedSegmentSeq = ref<number | null>(null);
   const isSimulationMode = ref(false);
+  const currentProfile = ref<HikerProfile | null>(null);
 
   const selectedSegment = computed(
     () =>
@@ -178,6 +191,7 @@ export const useRouteStore = defineStore("route", () => {
     isLoading.value = true;
     error.value = null;
     selectedSegmentSeq.value = null;
+    currentProfile.value = { ...profile };
 
     try {
       const upload = await uploadRoute(file);
@@ -189,15 +203,6 @@ export const useRouteStore = defineStore("route", () => {
           segment.seq,
           Boolean(segment.elevation_interpolated),
         ]),
-      );
-
-      const segments = markTopRiskSegments(
-        biomechanical.segments.map((segment) => ({
-          ...segment,
-          geom: segment.geom ?? undefined,
-          risk_score: calculateRiskScore(segment),
-          is_top_risk: false,
-        })),
       );
 
       analysis.value = {
@@ -215,26 +220,17 @@ export const useRouteStore = defineStore("route", () => {
           points_corrected: processed.points_corrected,
           time_to_severe_fatigue_h:
             biomechanical.summary.time_to_severe_fatigue_h,
-          mide_global: biomechanical.summary.mide_effort_level,
-          mide_dimensions: {
-            severity: 1,
-            orientation: 1,
-            displacement: Math.min(
-              5,
-              Math.max(1, Math.ceil(maxAbsSlope(segments) / 0.1)),
-            ),
-            effort: biomechanical.summary.mide_effort_level,
-          },
-          climate_source: "pending",
-          climate_timestamp: null,
+          ccr: biomechanical.summary.ccr,
+          mide_global: biomechanical.summary.mide_global,
+          mide_dimensions: biomechanical.summary.mide_dimensions,
+          climate_source: biomechanical.summary.climate_source,
+          climate_timestamp: biomechanical.summary.climate_timestamp,
         },
-        segments: segments.map((segment) => ({
-          ...segment,
-          is_eccentric_fatigue:
-            segment.is_eccentric_fatigue ||
-            Boolean(interpolatedBySeq.get(segment.seq)),
-        })),
+        segments: biomechanical.segments.map((segment) =>
+          mapBackendSegment(segment, interpolatedBySeq),
+        ),
       };
+      isSimulationMode.value = false;
     } catch (err) {
       error.value =
         err instanceof Error
@@ -292,11 +288,106 @@ export const useRouteStore = defineStore("route", () => {
   }
 
   async function runSimulation(
-    _scenario: SimulationScenario | object,
+    climate: SimulationScenario | ClimateOverride,
   ): Promise<void> {
-    error.value =
-      "El modo simulación depende de Fase 4/7 y todavía no está disponible.";
-    isSimulationMode.value = false;
+    if (!analysis.value) {
+      error.value = "Primero carga y analiza una ruta.";
+      return;
+    }
+
+    isLoading.value = true;
+    error.value = null;
+    try {
+      const body =
+        typeof climate === "string"
+          ? { scenario: climate, profile: currentProfile.value ?? undefined }
+          : { climate, profile: currentProfile.value ?? undefined };
+      const response = await fetch(
+        `${API_BASE}/routes/${analysis.value.route_id}/simulate`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      );
+
+      if (!response.ok)
+        throw new Error(`Simulation failed: ${await parseApiError(response)}`);
+
+      const simulated = (await response.json()) as BiomechanicalResponse;
+      analysis.value = {
+        ...analysis.value,
+        summary: {
+          ...analysis.value.summary,
+          total_distance_km: simulated.summary.total_distance_km,
+          elevation_gain_m: simulated.summary.elevation_gain_m,
+          elevation_loss_m: simulated.summary.elevation_loss_m,
+          estimated_time_h: simulated.summary.estimated_time_h,
+          total_kcal: simulated.summary.total_kcal,
+          high_confidence_segments_pct:
+            simulated.summary.high_confidence_segments_pct,
+          time_to_severe_fatigue_h: simulated.summary.time_to_severe_fatigue_h,
+          ccr: simulated.summary.ccr,
+          mide_global: simulated.summary.mide_global,
+          mide_dimensions: simulated.summary.mide_dimensions,
+          climate_source: simulated.summary.climate_source,
+          climate_timestamp: simulated.summary.climate_timestamp,
+        },
+        segments: simulated.segments.map((segment) => mapBackendSegment(segment)),
+      };
+      isSimulationMode.value = true;
+    } catch (err) {
+      error.value =
+        err instanceof Error ? err.message : "Error desconocido al simular clima";
+      isSimulationMode.value = false;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  async function refreshRealClimate(): Promise<void> {
+    if (!analysis.value) return;
+
+    isLoading.value = true;
+    error.value = null;
+    try {
+      const simulated = await analyzeBiomechanics(
+        analysis.value.route_id,
+        currentProfile.value ?? {
+          weight_kg: 70,
+          load_kg: 10,
+          fitness_level: "medium",
+        },
+      );
+      analysis.value = {
+        ...analysis.value,
+        summary: {
+          ...analysis.value.summary,
+          total_distance_km: simulated.summary.total_distance_km,
+          elevation_gain_m: simulated.summary.elevation_gain_m,
+          elevation_loss_m: simulated.summary.elevation_loss_m,
+          estimated_time_h: simulated.summary.estimated_time_h,
+          total_kcal: simulated.summary.total_kcal,
+          high_confidence_segments_pct:
+            simulated.summary.high_confidence_segments_pct,
+          time_to_severe_fatigue_h: simulated.summary.time_to_severe_fatigue_h,
+          ccr: simulated.summary.ccr,
+          mide_global: simulated.summary.mide_global,
+          mide_dimensions: simulated.summary.mide_dimensions,
+          climate_source: simulated.summary.climate_source,
+          climate_timestamp: simulated.summary.climate_timestamp,
+        },
+        segments: simulated.segments.map((segment) => mapBackendSegment(segment)),
+      };
+      isSimulationMode.value = false;
+    } catch (err) {
+      error.value =
+        err instanceof Error
+          ? err.message
+          : "Error desconocido al volver a clima real";
+    } finally {
+      isLoading.value = false;
+    }
   }
 
   function selectSegment(seq: number | null): void {
@@ -308,13 +399,7 @@ export const useRouteStore = defineStore("route", () => {
     error.value = null;
     selectedSegmentSeq.value = null;
     isSimulationMode.value = false;
-  }
-
-  function maxAbsSlope(segments: Segment[]): number {
-    return Math.max(
-      0,
-      ...segments.map((segment) => Math.abs(segment.slope_pct)),
-    );
+    currentProfile.value = null;
   }
 
   return {
@@ -326,6 +411,7 @@ export const useRouteStore = defineStore("route", () => {
     isSimulationMode,
     uploadAndAnalyze,
     runSimulation,
+    refreshRealClimate,
     selectSegment,
     reset,
   };
