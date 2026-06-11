@@ -44,7 +44,7 @@ def extract_elevations_from_dem(
     list of (lon, lat, elev) with DEM elevations where available.
     """
     result = []
-    for (lon, lat, elev), dem_elev in zip(coords, dem_values):
+    for (lon, lat, elev), dem_elev in zip(coords, dem_values, strict=True):
         if dem_elev is not None:
             result.append((lon, lat, float(dem_elev)))
         else:
@@ -70,17 +70,23 @@ def detect_and_repair_spikes(
     -------
     (cleaned_points, points_corrected)
     """
-    if len(points) < 2:
-        return list(points), 0
+    clean, corrected_indexes = _detect_and_repair_spikes_with_indexes(points)
+    return clean, len(corrected_indexes)
 
-    corrected = 0
+
+def _detect_and_repair_spikes_with_indexes(
+    points: list[tuple[float, float, float]],
+) -> tuple[list[tuple[float, float, float]], set[int]]:
+    """Internal variant that keeps the indexes corrected for RUT-11 persistence."""
+    if len(points) < 2:
+        return list(points), set()
+
+    corrected_indexes: set[int] = set()
     clean = list(points)
 
     for i in range(1, len(clean)):
         dh = clean[i][2] - clean[i - 1][2]
-        dx = _haversine_m(
-            clean[i - 1][0], clean[i - 1][1], clean[i][0], clean[i][1]
-        )
+        dx = _haversine_m(clean[i - 1][0], clean[i - 1][1], clean[i][0], clean[i][1])
         if dx > 0 and abs(dh / dx) > MAX_PLAUSIBLE_GRADIENT:
             prev_elev = clean[i - 1][2]
             next_elev = clean[min(i + 1, len(clean) - 1)][2]
@@ -89,9 +95,9 @@ def detect_and_repair_spikes(
                 clean[i][1],
                 (prev_elev + next_elev) / 2.0,
             )
-            corrected += 1
+            corrected_indexes.add(i)
 
-    return clean, corrected
+    return clean, corrected_indexes
 
 
 # ---------------------------------------------------------------------------
@@ -116,16 +122,16 @@ def smooth_elevations(
     -------
     list of (lon, lat, smoothed_elev)
     """
+    if window % 2 == 0:
+        raise ValueError("Savitzky-Golay window must be odd.")
+
     if len(points) < window:
         return list(points)
 
     elevations = [p[2] for p in points]
     smoothed = savgol_filter(elevations, window_length=window, polyorder=2).tolist()
 
-    return [
-        (lon, lat, float(elev))
-        for (lon, lat, _), elev in zip(points, smoothed)
-    ]
+    return [(lon, lat, float(elev)) for (lon, lat, _), elev in zip(points, smoothed, strict=True)]
 
 
 # ---------------------------------------------------------------------------
@@ -195,17 +201,12 @@ def split_into_segments(
 # ---------------------------------------------------------------------------
 
 
-def _haversine_m(
-    lon1: float, lat1: float, lon2: float, lat2: float
-) -> float:
+def _haversine_m(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
     """Horizontal distance in metres between two WGS-84 points."""
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     d_phi = phi2 - phi1
     d_lam = math.radians(lon2 - lon1)
-    a = (
-        math.sin(d_phi / 2) ** 2
-        + math.cos(phi1) * math.cos(phi2) * math.sin(d_lam / 2) ** 2
-    )
+    a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lam / 2) ** 2
     return 2 * EARTH_RADIUS_M * math.asin(math.sqrt(a))
 
 
@@ -248,7 +249,35 @@ def _make_segment(
         "elevation_start": round(elev_start, 3),
         "elevation_end": round(elev_end, 3),
         "slope_pct": round(slope_pct, 6),
+        "elevation_interpolated": False,
     }
+
+
+def _mark_segments_with_corrected_points(
+    segments: list[dict[str, Any]],
+    corrected_points: list[tuple[float, float, float]],
+) -> list[dict[str, Any]]:
+    """Mark segments whose geometry contains a corrected elevation point (RUT-11)."""
+    if not corrected_points:
+        return segments
+
+    corrected_xy = {(round(lon, 8), round(lat, 8)) for lon, lat, _ in corrected_points}
+
+    for segment in segments:
+        segment_xy = _coords_from_linestring_wkt(segment["geom_wkt"])
+        segment["elevation_interpolated"] = bool(corrected_xy.intersection(segment_xy))
+
+    return segments
+
+
+def _coords_from_linestring_wkt(wkt: str) -> set[tuple[float, float]]:
+    body = wkt.removeprefix("LINESTRINGZ(").removesuffix(")")
+    coords: set[tuple[float, float]] = set()
+    for raw_point in body.split(","):
+        parts = raw_point.strip().split()
+        if len(parts) >= 2:
+            coords.add((round(float(parts[0]), 8), round(float(parts[1]), 8)))
+    return coords
 
 
 # ---------------------------------------------------------------------------
@@ -314,13 +343,15 @@ def process_route_pipeline(
         coords = extract_elevations_from_dem(coords, dem_values)
 
     # RUT-10: Spike detection
-    cleaned, corrected = detect_and_repair_spikes(coords)
+    cleaned, corrected_indexes = _detect_and_repair_spikes_with_indexes(coords)
+    corrected_points = [cleaned[i] for i in sorted(corrected_indexes)]
 
     # RUT-09: Savitzky-Golay
     smoothed = smooth_elevations(cleaned, window=window)
 
     # RUT-01: Segmentation
     segments = split_into_segments(smoothed, segment_length_m)
+    segments = _mark_segments_with_corrected_points(segments, corrected_points)
 
     # RUT-03: Ascent / descent
     segments = mark_ascent_descent(segments)
@@ -330,7 +361,7 @@ def process_route_pipeline(
 
     return {
         "segments": segments,
-        "points_corrected": corrected,
+        "points_corrected": len(corrected_indexes),
         "elevation_gain_m": stats["elevation_gain_m"],
         "elevation_loss_m": stats["elevation_loss_m"],
         "processed_coords": smoothed,

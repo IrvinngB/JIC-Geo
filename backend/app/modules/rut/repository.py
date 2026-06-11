@@ -6,9 +6,8 @@ All database I/O lives here; no business logic.
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
-from geoalchemy2.shape import from_shape
-from shapely.geometry import LineString
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -19,14 +18,14 @@ from app.db.models import DEMSource, Route, Segment
 async def get_route_with_segments(db: AsyncSession, route_id: uuid.UUID) -> Route | None:
     """Fetch a Route eagerly loading its segments."""
     result = await db.execute(
-        select(Route)
-        .where(Route.id == route_id)
-        .options(selectinload(Route.segments))
+        select(Route).where(Route.id == route_id).options(selectinload(Route.segments))
     )
     return result.scalar_one_or_none()
 
 
-async def get_route_coords(db: AsyncSession, route_id: uuid.UUID) -> list[tuple[float, float, float]]:
+async def get_route_coords(
+    db: AsyncSession, route_id: uuid.UUID
+) -> list[tuple[float, float, float]]:
     """
     Extract ordered (lon, lat, elev) coordinates from a Route's LINESTRINGZ.
     Uses ST_DumpPoints to preserve order.
@@ -51,9 +50,7 @@ async def get_route_coords(db: AsyncSession, route_id: uuid.UUID) -> list[tuple[
 
 async def get_best_dem_source(db: AsyncSession) -> DEMSource | None:
     """Return the highest-priority DEM source, or None if none registered."""
-    result = await db.execute(
-        select(DEMSource).order_by(DEMSource.priority.desc()).limit(1)
-    )
+    result = await db.execute(select(DEMSource).order_by(DEMSource.priority.desc()).limit(1))
     return result.scalar_one_or_none()
 
 
@@ -103,7 +100,7 @@ async def get_dem_elevations(
 async def replace_segments(
     db: AsyncSession,
     route_id: uuid.UUID,
-    segments_data: list[dict],
+    segments_data: list[dict[str, Any]],
     dem_source: DEMSource | None = None,
 ) -> None:
     """
@@ -153,8 +150,6 @@ async def get_segments_for_route(
 ) -> list[Segment]:
     """Return all segments for a route ordered by seq."""
     result = await db.execute(
-        select(Segment)
-        .where(Segment.route_id == route_id)
-        .order_by(Segment.seq)
+        select(Segment).where(Segment.route_id == route_id).order_by(Segment.seq)
     )
     return list(result.scalars().all())

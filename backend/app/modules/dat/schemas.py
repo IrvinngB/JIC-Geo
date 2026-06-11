@@ -22,6 +22,7 @@ class SegmentOut(BaseModel):
     slope_pct: float | None
     surface_type: str
     canopy_density: float
+    elevation_interpolated: bool = False
 
     model_config = {"from_attributes": True}
 

@@ -6,6 +6,7 @@ Phase 3: Motor Biomecánico.
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -13,14 +14,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.db.session import get_db
-from app.modules.met.service import minetti_cot, pandolf_metabolic_rate, terrain_eta
+from app.modules.met import repository as met_repo
+from app.modules.met.service import (
+    estimate_time_to_severe_fatigue_h,
+    is_eccentric_fatigue,
+    is_on_path_surface,
+    minetti_cot,
+    pandolf_metabolic_rate,
+    terrain_eta,
+)
 from app.modules.prf.schemas import HikerProfile
 from app.modules.prf.service import velocity_factor
 from app.modules.rut import repository as rut_repo
-from app.modules.rut.schemas import SegmentProcessedOut
 from app.modules.vel.service import VelocityModel, calculate_velocity
 
 router = APIRouter()
+DB_DEPENDENCY = Depends(get_db)
 
 
 # ---------------------------------------------------------------------------
@@ -40,6 +49,8 @@ class BiomechanicalSegmentOut(BaseModel):
     cot_method: str
     metabolic_rate_w: float
     is_eccentric_fatigue: bool
+    surface_type: str
+    is_on_path: bool
     time_min: float
     kcal: float
 
@@ -53,6 +64,7 @@ class BiomechanicalSummary(BaseModel):
     estimated_time_h: float
     total_kcal: float
     high_confidence_segments_pct: float
+    time_to_severe_fatigue_h: float | None
     mide_effort_level: int  # 1-5 based on total effort
 
 
@@ -81,7 +93,7 @@ class BiomechanicalResponse(BaseModel):
 async def analyze_biomechanical(
     route_id: str,
     payload: BiomechanicalRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_DEPENDENCY,
 ) -> BiomechanicalResponse:
     """
     Analyze a route using the biomechanical engine (VEL + MET + PRF).
@@ -98,7 +110,7 @@ async def analyze_biomechanical(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid route_id format. Must be a valid UUID.",
-        )
+        ) from None
 
     route = await rut_repo.get_route_with_segments(db, route_uuid)
     if route is None:
@@ -117,9 +129,9 @@ async def analyze_biomechanical(
 
     profile = payload.profile
     v_factor = velocity_factor(profile)
-    eta = terrain_eta("dirt")  # default until surface_type is user-editable
 
     segments_out: list[BiomechanicalSegmentOut] = []
+    costs_to_persist: list[dict[str, Any]] = []
     total_kcal = 0.0
     total_time_h = 0.0
     total_distance_km = 0.0
@@ -132,11 +144,15 @@ async def analyze_biomechanical(
         length_m = seg.length_m or 0.0
         length_km = length_m / 1000.0
 
+        surface_type = seg.surface_type or "dirt"
+        eta = terrain_eta(surface_type)
+        is_on_path = is_on_path_surface(surface_type)
+
         # Velocity
         velocity_kmh = calculate_velocity(
             slope=slope,
             model=payload.velocity_model,
-            is_on_path=True,
+            is_on_path=is_on_path,
             apply_langmuir_correction=True,
         )
         velocity_kmh *= v_factor
@@ -166,8 +182,23 @@ async def analyze_biomechanical(
         total_energy_j = metabolic_rate_w * time_s
         kcal = total_energy_j / 4184.0
 
+        # Dynamic costs for DAT-06 / MET persistence
+        reverse_cot, _ = minetti_cot(-slope)
+        costs_to_persist.append(
+            {
+                "segment_id": seg.id,
+                "base_cost": cot_j_per_kg_m * length_m,
+                "base_reverse_cost": reverse_cot * length_m,
+                "velocity_kmh": velocity_kmh,
+                "cot_j_per_kg_m": cot_j_per_kg_m,
+                "cot_method": cot_method,
+                "metabolic_rate_w": metabolic_rate_w,
+                "risk_score": None,
+            }
+        )
+
         # Eccentric fatigue
-        is_eccentric = slope < -0.10
+        is_eccentric = is_eccentric_fatigue(slope)
 
         # Accumulate
         total_kcal += kcal
@@ -191,14 +222,22 @@ async def analyze_biomechanical(
                 cot_method=cot_method,
                 metabolic_rate_w=round(metabolic_rate_w, 1),
                 is_eccentric_fatigue=is_eccentric,
+                surface_type=surface_type,
+                is_on_path=is_on_path,
                 time_min=round(time_min, 2),
                 kcal=round(kcal, 1),
             )
         )
 
-    high_confidence_pct = (
-        (exact_segments / len(segments_db)) * 100 if segments_db else 0
+    high_confidence_pct = (exact_segments / len(segments_db)) * 100 if segments_db else 0
+    time_to_severe_fatigue_h = estimate_time_to_severe_fatigue_h(
+        weight_kg=profile.weight_kg,
+        fitness_level=profile.fitness_level.value,
+        total_kcal=total_kcal,
+        elapsed_time_h=total_time_h,
     )
+
+    await met_repo.upsert_segment_costs(db, costs_to_persist)
 
     # MIDE effort level: map estimated time to 1-5 scale
     # <1h → 1, 1-3h → 2, 3-5h → 3, 5-8h → 4, >8h → 5
@@ -221,6 +260,9 @@ async def analyze_biomechanical(
         estimated_time_h=round(total_time_h, 2),
         total_kcal=round(total_kcal, 1),
         high_confidence_segments_pct=round(high_confidence_pct, 1),
+        time_to_severe_fatigue_h=(
+            round(time_to_severe_fatigue_h, 2) if time_to_severe_fatigue_h is not None else None
+        ),
         mide_effort_level=effort_level,
     )
 

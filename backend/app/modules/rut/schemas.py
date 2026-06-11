@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import uuid
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class RouteProcessRequest(BaseModel):
@@ -14,6 +14,13 @@ class RouteProcessRequest(BaseModel):
 
     segment_length_m: float = Field(default=100.0, gt=0, description="RUT-01")
     savgol_window: int = Field(default=5, ge=5, le=21, description="RUT-09")
+
+    @field_validator("savgol_window")
+    @classmethod
+    def savgol_window_must_be_odd(cls, value: int) -> int:
+        if value % 2 == 0:
+            raise ValueError("savgol_window must be odd")
+        return value
 
 
 class SegmentProcessedOut(BaseModel):
@@ -25,6 +32,7 @@ class SegmentProcessedOut(BaseModel):
     elevation_end: float
     slope_pct: float
     direction: str  # 'ascent' | 'descent'
+    elevation_interpolated: bool = False
 
     model_config = {"from_attributes": True}
 

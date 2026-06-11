@@ -22,15 +22,16 @@ def tobler(slope: float, is_on_path: bool = True) -> float:
     return w * 0.6 if not is_on_path else w  # VEL-04: off-path factor
 
 
-def irmischer_clarke(slope: float) -> float:
+def irmischer_clarke(slope: float, is_on_path: bool = True) -> float:
     """
     Irmischer & Clarke (2018) — on-path, male.
     v(S) = [0.11 + e^(−(S + 0.0506)² / (2 × 0.2043²))] × 3.6
     Returns velocity in km/h.
-    VEL-02
+    VEL-02, VEL-04
     """
     exponent = -((slope + 0.0506) ** 2) / (2 * (0.2043**2))
-    return (0.11 + math.exp(exponent)) * 3.6
+    velocity = (0.11 + math.exp(exponent)) * 3.6
+    return velocity * 0.6 if not is_on_path else velocity
 
 
 def apply_langmuir(velocity_kmh: float, slope_deg: float, is_descent: bool) -> float:
@@ -80,7 +81,11 @@ def calculate_velocity(
     Returns velocity in km/h.
     VEL-03, VEL-05, VEL-06
     """
-    base = tobler(slope, is_on_path) if model == VelocityModel.TOBLER else irmischer_clarke(slope)
+    base = (
+        tobler(slope, is_on_path)
+        if model == VelocityModel.TOBLER
+        else irmischer_clarke(slope, is_on_path)
+    )
 
     if apply_langmuir_correction and slope < 0:
         slope_deg = _slope_pct_to_deg(abs(slope))

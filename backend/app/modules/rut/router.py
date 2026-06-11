@@ -15,13 +15,15 @@ from app.modules.rut import service as rut_service
 from app.modules.rut.schemas import RouteProcessRequest, RouteProcessResponse, SegmentProcessedOut
 
 router = APIRouter()
+DEFAULT_ROUTE_PROCESS_REQUEST = RouteProcessRequest()
+DB_DEPENDENCY = Depends(get_db)
 
 
 @router.post("/{route_id}/process", response_model=RouteProcessResponse)
 async def process_route(
     route_id: str,
-    payload: RouteProcessRequest = RouteProcessRequest(),
-    db: AsyncSession = Depends(get_db),
+    payload: RouteProcessRequest = DEFAULT_ROUTE_PROCESS_REQUEST,
+    db: AsyncSession = DB_DEPENDENCY,
 ) -> RouteProcessResponse:
     """
     Re-process a route through the RUT pipeline.
@@ -39,7 +41,7 @@ async def process_route(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid route_id format. Must be a valid UUID.",
-        )
+        ) from None
 
     route = await rut_repo.get_route_with_segments(db, route_uuid)
     if route is None:
@@ -84,6 +86,7 @@ async def process_route(
             elevation_end=seg.elevation_end or 0.0,
             slope_pct=seg.slope_pct or 0.0,
             direction="ascent" if (seg.slope_pct or 0) > 0 else "descent",
+            elevation_interpolated=seg.elevation_interpolated,
         )
         for seg in segments_db
     ]
