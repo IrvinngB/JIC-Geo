@@ -153,3 +153,21 @@ async def get_segments_for_route(
         select(Segment).where(Segment.route_id == route_id).order_by(Segment.seq)
     )
     return list(result.scalars().all())
+
+
+async def get_segment_geojson_by_id(
+    db: AsyncSession,
+    route_id: uuid.UUID,
+) -> dict[int, str]:
+    """Return segment geometries as GeoJSON strings keyed by segment id."""
+    result = await db.execute(
+        text(
+            """
+            SELECT id, ST_AsGeoJSON(geom)::text AS geom_geojson
+            FROM segments
+            WHERE route_id = :route_id
+            """
+        ),
+        {"route_id": str(route_id)},
+    )
+    return {int(row.id): row.geom_geojson for row in result.fetchall()}

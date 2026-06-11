@@ -1,0 +1,431 @@
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import maplibregl, { type StyleSpecification } from 'maplibre-gl'
+import type { Feature, FeatureCollection, LineString } from 'geojson'
+import type { RouteAnalysis } from '@/stores/routeStore'
+
+type BaseMapId = 'streets' | 'topo' | 'satellite'
+
+interface BaseMapOption {
+  id: BaseMapId
+  label: string
+  description: string
+  attribution: string
+  tiles: string[]
+  maxZoom?: number
+}
+
+const BASE_MAPS: BaseMapOption[] = [
+  {
+    id: 'streets',
+    label: 'Calles',
+    description: 'OpenStreetMap estándar',
+    attribution: '© OpenStreetMap contributors',
+    tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+    maxZoom: 19,
+  },
+  {
+    id: 'topo',
+    label: 'Topo',
+    description: 'Relieve y curvas visuales',
+    attribution: '© OpenStreetMap contributors, SRTM | OpenTopoMap',
+    tiles: ['https://a.tile.opentopomap.org/{z}/{x}/{y}.png'],
+    maxZoom: 17,
+  },
+  {
+    id: 'satellite',
+    label: 'Satélite',
+    description: 'World Imagery',
+    attribution: 'Tiles © Esri',
+    tiles: [
+      'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    ],
+    maxZoom: 19,
+  },
+]
+
+const props = defineProps<{
+  analysis: RouteAnalysis | null
+  selectedSeq: number | null
+}>()
+
+const emit = defineEmits<{
+  selectSegment: [seq: number | null]
+}>()
+
+const mapContainer = ref<HTMLDivElement | null>(null)
+const selectedBaseMap = ref<BaseMapId>('streets')
+const terrainEnabled = ref(false)
+let map: maplibregl.Map | null = null
+let hasFitRoute = false
+
+const currentBaseMap = computed(
+  () => BASE_MAPS.find((baseMap) => baseMap.id === selectedBaseMap.value) ?? BASE_MAPS[0],
+)
+
+const hasGeometries = computed(
+  () => props.analysis?.segments.some((segment) => Boolean(segment.geom)) ?? false,
+)
+
+const visibleSegments = computed(() => props.analysis?.segments ?? [])
+
+onMounted(() => {
+  if (!mapContainer.value) return
+
+  map = new maplibregl.Map({
+    container: mapContainer.value,
+    center: [-79.5, 9.0],
+    zoom: 9,
+    pitch: terrainEnabled.value ? 60 : 0,
+    bearing: terrainEnabled.value ? -25 : 0,
+    style: buildMapStyle(currentBaseMap.value),
+  })
+
+  map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right')
+  map.on('load', () => {
+    applyTerrainMode()
+    renderRouteLayer()
+  })
+})
+
+onBeforeUnmount(() => {
+  map?.remove()
+  map = null
+})
+
+watch(
+  () => props.analysis,
+  () => {
+    hasFitRoute = false
+    renderRouteLayer()
+  },
+  { deep: true },
+)
+
+watch(
+  () => props.selectedSeq,
+  (seq) => {
+    renderRouteLayer()
+    flyToSegment(seq)
+  },
+)
+
+watch(selectedBaseMap, () => {
+  if (!map) return
+  map.setStyle(buildMapStyle(currentBaseMap.value))
+  map.once('style.load', () => {
+    applyTerrainMode()
+    renderRouteLayer()
+  })
+})
+
+watch(terrainEnabled, () => {
+  applyTerrainMode()
+})
+
+function buildMapStyle(baseMap: BaseMapOption): StyleSpecification {
+  return {
+    version: 8,
+    sources: {
+      'base-raster': {
+        type: 'raster',
+        tiles: baseMap.tiles,
+        tileSize: 256,
+        maxzoom: baseMap.maxZoom ?? 19,
+        attribution: baseMap.attribution,
+      },
+      'terrain-dem': {
+        type: 'raster-dem',
+        tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+        tileSize: 256,
+        encoding: 'terrarium',
+        maxzoom: 15,
+        attribution: 'Elevation tiles © Mapzen / AWS',
+      },
+    },
+    layers: [
+      {
+        id: 'base-raster',
+        type: 'raster',
+        source: 'base-raster',
+      },
+      {
+        id: 'terrain-hillshade',
+        type: 'hillshade',
+        source: 'terrain-dem',
+        layout: {
+          visibility: baseMap.id === 'satellite' ? 'none' : 'visible',
+        },
+        paint: {
+          'hillshade-exaggeration': 0.25,
+          'hillshade-shadow-color': '#334155',
+          'hillshade-highlight-color': '#ffffff',
+          'hillshade-accent-color': '#64748b',
+        },
+      },
+    ],
+  }
+}
+
+function applyTerrainMode(): void {
+  if (!map?.loaded()) return
+
+  if (terrainEnabled.value) {
+    map.setTerrain({ source: 'terrain-dem', exaggeration: 1.35 })
+    map.easeTo({ pitch: 62, bearing: -25, duration: 700 })
+  } else {
+    map.setTerrain(null)
+    map.easeTo({ pitch: 0, bearing: 0, duration: 700 })
+  }
+}
+
+function buildFeatureCollection(): FeatureCollection<LineString> {
+  const hasSelection = props.selectedSeq !== null
+
+  const features: Array<Feature<LineString>> =
+    props.analysis?.segments
+      .filter((segment) => segment.geom)
+      .map((segment) => ({
+        type: 'Feature',
+        properties: {
+          seq: segment.seq,
+          risk_score: segment.risk_score,
+          selected: segment.seq === props.selectedSeq,
+          // Dimmed when there IS a selection and this is not the chosen one.
+          // No selection => nothing dimmed, whole route stays at full opacity.
+          dimmed: hasSelection && segment.seq !== props.selectedSeq,
+        },
+        geometry: segment.geom as LineString,
+      })) ?? []
+
+  return {
+    type: 'FeatureCollection',
+    features,
+  }
+}
+
+function renderRouteLayer(): void {
+  // isStyleLoaded() guards what we actually need (style present to add
+  // layers), without waiting for raster tiles like loaded() does. After a
+  // base-map switch, loaded() can stay false while tiles download, which
+  // previously left the route unpainted on some base maps.
+  if (!map?.isStyleLoaded()) return
+
+  const data = buildFeatureCollection()
+  const source = map.getSource('route-segments') as maplibregl.GeoJSONSource | undefined
+
+  if (source) {
+    source.setData(data)
+  } else {
+    map.addSource('route-segments', {
+      type: 'geojson',
+      data,
+    })
+
+    // Casing: a dark, slightly wider line under the colored one. It gives the
+    // route a consistent outline so it reads clearly over any base map
+    // (streets, topo, satellite) instead of blending into the background.
+    map.addLayer({
+      id: 'route-segments-casing',
+      type: 'line',
+      source: 'route-segments',
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+      },
+      paint: {
+        'line-width': ['case', ['boolean', ['get', 'selected'], false], 11, 7],
+        'line-color': '#0f172a',
+        'line-opacity': ['case', ['boolean', ['get', 'dimmed'], false], 0.15, 0.65],
+      },
+    })
+
+    map.addLayer({
+      id: 'route-segments-line',
+      type: 'line',
+      source: 'route-segments',
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+      },
+      paint: {
+        'line-width': ['case', ['boolean', ['get', 'selected'], false], 7, 4.5],
+        // Spotlight: dim the rest of the route when a segment is selected so
+        // the chosen one (full opacity + thicker) stands out by contrast.
+        'line-opacity': ['case', ['boolean', ['get', 'dimmed'], false], 0.2, 0.95],
+        'line-color': [
+          'interpolate',
+          ['linear'],
+          ['get', 'risk_score'],
+          0,
+          '#22c55e',
+          45,
+          '#eab308',
+          75,
+          '#ef4444',
+        ],
+      },
+    })
+
+    map.on('click', 'route-segments-line', (event) => {
+      const seq = event.features?.[0]?.properties?.seq
+      emit('selectSegment', typeof seq === 'number' ? seq : Number(seq))
+    })
+  }
+
+  if (!hasFitRoute) {
+    fitToFeatures(data)
+    hasFitRoute = data.features.length > 0
+  }
+}
+
+function fitToFeatures(data: FeatureCollection<LineString>): void {
+  if (!map || data.features.length === 0) return
+
+  const bounds = new maplibregl.LngLatBounds()
+  for (const feature of data.features) {
+    for (const coordinate of feature.geometry.coordinates) {
+      bounds.extend([coordinate[0], coordinate[1]])
+    }
+  }
+
+  if (!bounds.isEmpty()) {
+    map.fitBounds(bounds, {
+      // Asymmetric padding leaves room for the floating panels so the route
+      // is never hidden behind them: extra space at the bottom (segment list)
+      // and on the right (base-map control).
+      padding: { top: 90, bottom: 280, left: 60, right: 90 },
+      maxZoom: terrainEnabled.value ? 14 : 15,
+      pitch: terrainEnabled.value ? 62 : 0,
+      bearing: terrainEnabled.value ? -25 : 0,
+      duration: 900,
+    })
+  }
+}
+
+function recenterRoute(): void {
+  const data = buildFeatureCollection()
+  if (data.features.length === 0) return
+  hasFitRoute = false
+  fitToFeatures(data)
+  hasFitRoute = true
+}
+
+function flyToSegment(seq: number | null): void {
+  if (!map || seq === null) return
+
+  const segment = props.analysis?.segments.find((item) => item.seq === seq)
+  if (!segment?.geom) return
+
+  const bounds = new maplibregl.LngLatBounds()
+  for (const coordinate of segment.geom.coordinates) {
+    bounds.extend([coordinate[0], coordinate[1]])
+  }
+  if (bounds.isEmpty()) return
+
+  map.fitBounds(bounds, {
+    padding: 160,
+    maxZoom: 16,
+    duration: 800,
+  })
+}
+
+function setBaseMap(baseMapId: BaseMapId): void {
+  selectedBaseMap.value = baseMapId
+}
+
+function riskBadgeClass(score: number): string {
+  if (score >= 75) return 'badge-error'
+  if (score >= 45) return 'badge-warning'
+  return 'badge-success'
+}
+</script>
+
+<template>
+  <section class="relative h-full w-full bg-base-300">
+    <div ref="mapContainer" class="h-full w-full"></div>
+
+    <div class="absolute right-4 top-16 z-10 w-64 rounded-box bg-base-100/95 p-3 shadow-xl backdrop-blur">
+      <div class="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <h3 class="text-sm font-bold">Mapa</h3>
+          <p class="text-xs text-base-content/60">{{ currentBaseMap.description }}</p>
+        </div>
+        <label class="swap btn btn-ghost btn-sm">
+          <input v-model="terrainEnabled" type="checkbox" />
+          <span class="swap-off text-xs font-bold">2D</span>
+          <span class="swap-on text-xs font-bold">3D</span>
+        </label>
+      </div>
+
+      <div class="grid grid-cols-3 gap-2">
+        <button
+          v-for="baseMap in BASE_MAPS"
+          :key="baseMap.id"
+          class="btn btn-xs"
+          :class="baseMap.id === selectedBaseMap ? 'btn-primary text-white' : 'btn-ghost'"
+          @click="setBaseMap(baseMap.id)"
+        >
+          {{ baseMap.label }}
+        </button>
+      </div>
+
+      <button
+        v-if="hasGeometries"
+        class="btn btn-outline btn-xs mt-2 w-full"
+        @click="recenterRoute"
+      >
+        Ver ruta completa
+      </button>
+    </div>
+
+    <div class="pointer-events-none absolute inset-x-4 top-4 flex flex-col gap-3 md:inset-x-auto md:left-4 md:w-80">
+      <div v-if="!props.analysis" class="alert bg-base-100/90 shadow-lg backdrop-blur">
+        <div>
+          <h3 class="font-bold">Carga una ruta</h3>
+          <p class="text-xs text-base-content/70">El mapa se actualizará después del análisis.</p>
+        </div>
+      </div>
+
+      <div v-else-if="!hasGeometries" class="alert alert-warning bg-base-100/90 shadow-lg backdrop-blur">
+        <div>
+          <h3 class="font-bold">Análisis listo</h3>
+          <p class="text-xs text-base-content/70">
+            No hay geometrías disponibles para dibujar la línea de ruta.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="props.analysis"
+      class="absolute bottom-4 left-4 right-4 hidden max-h-64 overflow-y-auto rounded-box bg-base-100/95 p-3 shadow-xl backdrop-blur md:right-auto md:block md:w-96"
+    >
+      <div class="mb-2 flex items-center justify-between">
+        <h3 class="text-sm font-bold">Segmentos</h3>
+        <span class="badge badge-ghost">{{ props.analysis.segments.length }}</span>
+      </div>
+      <div class="space-y-2">
+        <button
+          v-for="segment in visibleSegments"
+          :key="segment.seq"
+          class="btn btn-ghost h-auto min-h-0 w-full justify-start p-2 text-left"
+          :class="segment.seq === props.selectedSeq ? 'bg-primary/10' : ''"
+          @click="emit('selectSegment', segment.seq)"
+        >
+          <div class="flex w-full items-center justify-between gap-3">
+            <div>
+              <p class="text-xs font-semibold">#{{ segment.seq }} · {{ segment.direction }}</p>
+              <p class="text-xs text-base-content/60">
+                {{ segment.velocity_kmh }} km/h · {{ segment.kcal }} kcal · S {{ segment.slope_pct }}
+              </p>
+            </div>
+            <span class="badge badge-sm" :class="riskBadgeClass(segment.risk_score)">
+              {{ segment.risk_score }}
+            </span>
+          </div>
+        </button>
+      </div>
+    </div>
+  </section>
+</template>

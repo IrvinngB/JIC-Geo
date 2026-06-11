@@ -5,6 +5,7 @@ Phase 3: Motor Biomecánico.
 
 from __future__ import annotations
 
+import json
 import uuid
 from typing import Any
 
@@ -53,6 +54,7 @@ class BiomechanicalSegmentOut(BaseModel):
     is_on_path: bool
     time_min: float
     kcal: float
+    geom: dict[str, Any] | None = None
 
 
 class BiomechanicalSummary(BaseModel):
@@ -126,6 +128,8 @@ async def analyze_biomechanical(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Route has no segments. Process the route first via POST /routes/{id}/process.",
         )
+
+    segment_geojson_by_id = await rut_repo.get_segment_geojson_by_id(db, route_uuid)
 
     profile = payload.profile
     v_factor = velocity_factor(profile)
@@ -226,6 +230,9 @@ async def analyze_biomechanical(
                 is_on_path=is_on_path,
                 time_min=round(time_min, 2),
                 kcal=round(kcal, 1),
+                geom=json.loads(segment_geojson_by_id[seg.id])
+                if seg.id in segment_geojson_by_id
+                else None,
             )
         )
 

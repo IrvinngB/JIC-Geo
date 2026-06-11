@@ -1,86 +1,191 @@
-<!--
-  MapView — Main application view.
-  Full-screen map with sidebar panels. Implemented in Phase 8.
-  Placeholder styled with Tailwind CSS & DaisyUI.
--->
 <script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
+import RouteMap from '@/components/map/RouteMap.vue'
+import HikerProfileForm from '@/components/sidebar/HikerProfileForm.vue'
+import RouteSummary from '@/components/sidebar/RouteSummary.vue'
+import FileUploader from '@/components/upload/FileUploader.vue'
+import { useHikerProfile } from '@/composables/useHikerProfile'
 import { useTheme } from '@/composables/useTheme'
+import { useRouteStore } from '@/stores/routeStore'
+import type { HikerProfile } from '@/composables/useHikerProfile'
 
 const { currentTheme, toggleTheme } = useTheme()
+const { profile, isValid } = useHikerProfile()
+const routeStore = useRouteStore()
+const { analysis, error, isLoading, selectedSegment } = storeToRefs(routeStore)
 
-// Components will be added in Phase 8:
-// import RouteMap from '@/components/map/RouteMap.vue'
-// import RouteSummary from '@/components/sidebar/RouteSummary.vue'
-// import FileUploader from '@/components/upload/FileUploader.vue'
-// import HikerProfileForm from '@/components/sidebar/HikerProfileForm.vue'
-// import ClimateToggle from '@/components/simulation/ClimateToggle.vue'
-// import ClimateSliders from '@/components/simulation/ClimateSliders.vue'
+// On mobile the side panel becomes a bottom sheet. This drives its open state;
+// on desktop (md+) it is ignored because the panel is a static sidebar.
+const sheetOpen = ref(false)
+
+// Raise the sheet automatically when a segment is selected so its detail is
+// visible without an extra tap.
+watch(selectedSegment, (segment) => {
+  if (segment) sheetOpen.value = true
+})
+
+const selectedRiskLabel = computed(() => {
+  const score = selectedSegment.value?.risk_score ?? 0
+  if (score >= 75) return 'Alto'
+  if (score >= 45) return 'Medio'
+  return 'Bajo'
+})
+
+const selectedRiskClass = computed(() => {
+  const score = selectedSegment.value?.risk_score ?? 0
+  if (score >= 75) return 'badge-error'
+  if (score >= 45) return 'badge-warning'
+  return 'badge-success'
+})
+
+const selectedSegmentMeaning = computed(() => {
+  const segment = selectedSegment.value
+  if (!segment) return ''
+
+  const notes: string[] = []
+  if (segment.risk_score >= 75) notes.push('tramo crítico: conviene bajar el ritmo')
+  else if (segment.risk_score >= 45) notes.push('tramo de atención: puede cansar más de lo normal')
+  else notes.push('tramo relativamente cómodo')
+
+  if (segment.is_eccentric_fatigue) {
+    notes.push('la bajada puede cargar cuádriceps y rodillas')
+  }
+  if (!segment.is_on_path) {
+    notes.push('terreno no consolidado: avance más lento')
+  }
+  if (Math.abs(segment.slope_pct) >= 0.15) {
+    notes.push('pendiente fuerte')
+  }
+
+  return `Este es un ${notes.join('; ')}.`
+})
+
+function directionLabel(direction: string): string {
+  if (direction === 'ascent') return 'Subida'
+  if (direction === 'descent') return 'Bajada'
+  return 'Plano'
+}
+
+async function analyzeRoute(file: File, selectedProfile: HikerProfile): Promise<void> {
+  await routeStore.uploadAndAnalyze(file, selectedProfile)
+}
 </script>
 
 <template>
-  <div class="h-screen w-screen flex flex-col md:flex-row bg-base-300 text-base-content overflow-hidden">
-    <!-- Sidebar -->
-    <aside class="w-full md:w-80 lg:w-96 bg-base-200 border-b md:border-b-0 md:border-r border-base-100 flex flex-col shrink-0">
-      <div class="p-6 border-b border-base-100 flex items-center justify-between">
+  <div class="relative flex h-screen w-screen flex-col overflow-hidden bg-base-300 text-base-content md:flex-row">
+    <aside
+      class="fixed inset-x-0 bottom-0 z-30 flex h-[85vh] flex-col rounded-t-2xl bg-base-200 shadow-2xl transition-transform duration-300 ease-out md:static md:z-auto md:h-auto md:w-96 md:shrink-0 md:translate-y-0 md:rounded-none md:border-r md:border-base-100 md:shadow-none"
+      :class="sheetOpen ? 'translate-y-0' : 'translate-y-[calc(85vh_-_3.5rem)] md:translate-y-0'"
+    >
+      <button
+        type="button"
+        class="flex shrink-0 flex-col items-center gap-1 px-4 pb-2 pt-3 md:hidden"
+        @click="sheetOpen = !sheetOpen"
+      >
+        <span class="h-1.5 w-12 rounded-full bg-base-content/25"></span>
+        <span class="text-xs font-semibold text-base-content/70">
+          {{ sheetOpen ? 'Ocultar panel ▾' : analysis ? 'Ver perfil y resumen ▴' : 'Perfil y carga de ruta ▴' }}
+        </span>
+      </button>
+
+      <div class="flex items-center justify-between border-b border-base-100 p-5">
         <div>
-          <h1 class="text-2xl font-extrabold tracking-tight bg-gradient-to-r from-success to-primary bg-clip-text text-transparent">JIC-Geo</h1>
-          <p class="text-xs text-base-content/60 mt-1">Dynamic Risk Index for Hikers</p>
+          <h1
+            class="bg-gradient-to-r from-success to-primary bg-clip-text text-2xl font-extrabold tracking-tight text-transparent"
+          >
+            JIC-Geo
+          </h1>
+          <p class="mt-1 text-xs text-base-content/60">Índice dinámico de riesgo en senderismo</p>
         </div>
         <div class="flex items-center gap-2">
-          <button @click="toggleTheme" class="btn btn-ghost btn-xs btn-circle text-base-content/60 hover:text-base-content" title="Toggle Theme">
-            <!-- Sun Icon for dark theme -->
-            <svg v-if="currentTheme === 'jic-dark'" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4.5 h-4.5">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m0 13.5V21M5.22 5.22l1.58 1.58m9.75 9.75l1.58 1.58M3 12h2.25m13.5 0H21M5.22 18.78l1.58-1.58m9.75-9.75l1.58-1.58M12 7.5a4.5 4.5 0 110 9 4.5 4.5 0 010-9z" />
-            </svg>
-            <!-- Moon Icon for light theme -->
-            <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4.5 h-4.5">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
-            </svg>
+          <button
+            class="btn btn-ghost btn-circle btn-sm text-base-content/60 hover:text-base-content"
+            title="Cambiar tema"
+            @click="toggleTheme"
+          >
+            <span v-if="currentTheme === 'jic-dark'">☀️</span>
+            <span v-else>🌙</span>
           </button>
-          <div class="badge badge-success badge-outline text-xs">v0.1.0</div>
+          <div class="badge badge-success badge-outline text-xs">FE alpha</div>
         </div>
       </div>
-      
-      <div class="p-6 flex-1 overflow-y-auto space-y-6">
-        <div class="card bg-base-100 shadow-md">
-          <div class="card-body p-4">
-            <h2 class="card-title text-sm font-semibold uppercase tracking-wider text-base-content/50">Infrastructure</h2>
-            <div class="flex items-center gap-3 mt-2">
-              <div class="w-3.5 h-3.5 rounded-full bg-success/20 flex items-center justify-center">
-                <div class="w-2 h-2 rounded-full bg-success animate-pulse"></div>
-              </div>
-              <span class="text-sm font-medium">Vue 3 + Vite + TS</span>
-            </div>
-            <div class="flex items-center gap-3">
-              <div class="w-3.5 h-3.5 rounded-full bg-success/20 flex items-center justify-center">
-                <div class="w-2 h-2 rounded-full bg-success animate-pulse"></div>
-              </div>
-              <span class="text-sm font-medium">Tailwind + DaisyUI</span>
-            </div>
-          </div>
+
+      <div class="flex-1 space-y-4 overflow-y-auto overscroll-contain p-4">
+        <HikerProfileForm v-model="profile" :is-valid="isValid()" :disabled="isLoading" />
+
+        <FileUploader
+          :profile="profile"
+          :can-submit="isValid()"
+          :is-loading="isLoading"
+          @analyze="analyzeRoute"
+        />
+
+        <div v-if="error" class="alert alert-error text-xs shadow-md">
+          <span>{{ error }}</span>
         </div>
 
-        <div class="alert alert-info shadow-sm bg-info/10 border-info/20 text-info">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-          <div class="text-xs">
-            <h3 class="font-bold">Phase 0 Complete</h3>
-            <p class="text-base-content/80 mt-0.5">Monorepo structure set up. Next: GPX upload & PostGIS ingestion.</p>
+        <RouteSummary :analysis="analysis" />
+
+        <section v-if="selectedSegment" class="card bg-base-100 shadow-md">
+          <div class="card-body p-4 text-sm">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <h2 class="font-bold">Tramo #{{ selectedSegment.seq }}</h2>
+                <p class="text-xs text-base-content/60">{{ directionLabel(selectedSegment.direction) }}</p>
+              </div>
+              <span class="badge" :class="selectedRiskClass">
+                Riesgo {{ selectedRiskLabel }} · {{ selectedSegment.risk_score }}/100
+              </span>
+            </div>
+
+            <div class="mt-3 rounded-box bg-base-200 p-3 text-xs leading-relaxed text-base-content/70">
+              {{ selectedSegmentMeaning }}
+            </div>
+
+            <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
+              <div class="rounded-box bg-base-200 p-2">
+                <span class="block text-base-content/50">Velocidad esperada</span>
+                <strong>{{ selectedSegment.velocity_kmh }} km/h</strong>
+                <p class="mt-1 text-base-content/50">Más bajo = tramo más lento.</p>
+              </div>
+              <div class="rounded-box bg-base-200 p-2">
+                <span class="block text-base-content/50">Pendiente</span>
+                <strong>{{ selectedSegment.slope_pct }}</strong>
+                <p class="mt-1 text-base-content/50">+ sube, - baja.</p>
+              </div>
+              <div class="rounded-box bg-base-200 p-2">
+                <span class="block text-base-content/50">Costo por metro</span>
+                <strong>{{ selectedSegment.cot_j_per_kg_m }} J/kg·m</strong>
+                <p class="mt-1 text-base-content/50">Energía por peso y distancia.</p>
+              </div>
+              <div class="rounded-box bg-base-200 p-2">
+                <span class="block text-base-content/50">Esfuerzo instantáneo</span>
+                <strong>{{ selectedSegment.metabolic_rate_w }} W</strong>
+                <p class="mt-1 text-base-content/50">Qué tan fuerte trabaja el cuerpo.</p>
+              </div>
+            </div>
+
+            <div class="mt-3 flex flex-wrap gap-2">
+              <span class="badge badge-ghost">Superficie: {{ selectedSegment.surface_type }}</span>
+              <span class="badge" :class="selectedSegment.is_on_path ? 'badge-success' : 'badge-warning'">
+                {{ selectedSegment.is_on_path ? 'sendero consolidado' : 'off-path' }}
+              </span>
+              <span v-if="selectedSegment.is_eccentric_fatigue" class="badge badge-error">
+                bajada fatigante
+              </span>
+            </div>
           </div>
-        </div>
+        </section>
       </div>
     </aside>
 
-    <!-- Map Area (Placeholder) -->
-    <main class="flex-1 relative flex items-center justify-center bg-base-300">
-      <div class="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.15),rgba(255,255,255,0))]"></div>
-      <div class="z-10 text-center max-w-md p-6">
-        <h2 class="text-3xl font-extrabold mb-2">Interactive Map Area</h2>
-        <p class="text-base-content/70 mb-6">MapLibre GL JS will render the 3D terrain and risk routes here in Phase 8.</p>
-        <div class="flex justify-center gap-4">
-          <button class="btn btn-primary shadow-lg text-white">Upload GPX</button>
-          <button class="btn btn-outline border-base-content/20 hover:border-primary">Simulation Mode</button>
-        </div>
-      </div>
+    <main class="absolute inset-0 md:static md:min-h-0 md:flex-1">
+      <RouteMap
+        :analysis="analysis"
+        :selected-seq="selectedSegment?.seq ?? null"
+        @select-segment="routeStore.selectSegment"
+      />
     </main>
   </div>
 </template>
