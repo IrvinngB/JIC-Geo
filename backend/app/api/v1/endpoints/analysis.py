@@ -9,7 +9,7 @@ import json
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +18,8 @@ from app.db.session import get_db
 from app.modules.cli import repository as cli_repo
 from app.modules.cli.schemas import ClimateData, ClimateOverride
 from app.modules.cli.service import climate_from_override
+from app.modules.dat import repository as dat_repo
+from app.modules.dat import service as dat_service
 from app.modules.met import repository as met_repo
 from app.modules.met.service import (
     estimate_time_to_severe_fatigue_h,
@@ -27,7 +29,7 @@ from app.modules.met.service import (
     pandolf_metabolic_rate,
     terrain_eta,
 )
-from app.modules.prf.schemas import HikerProfile
+from app.modules.prf.schemas import FitnessLevel, HikerProfile
 from app.modules.prf.service import velocity_factor
 from app.modules.rie import repository as rie_repo
 from app.modules.rie.schemas import ClimateFactors, MideDimensions, RiskWeights
@@ -38,6 +40,7 @@ from app.modules.rie.service import (
     summarize_route_risk,
 )
 from app.modules.rut import repository as rut_repo
+from app.modules.rut.router import run_rut_pipeline
 from app.modules.sim.schemas import SimulationRequest
 from app.modules.sim.service import resolve_simulation_climate
 from app.modules.vel.service import VelocityModel, calculate_velocity
@@ -120,6 +123,26 @@ class SimulationResponse(BaseModel):
     real: BiomechanicalResponse | None = None
 
 
+class SegmentRiskOut(BaseModel):
+    """Persisted per-segment risk (API-03)."""
+
+    seq: int
+    risk_score: int
+    is_top_risk: bool
+    geom: dict[str, Any] | None = None
+
+
+class RouteRiskResponse(BaseModel):
+    """Current persisted risk index for a route. API-03, RIE-10."""
+
+    route_id: uuid.UUID
+    segment_count: int
+    max_risk_score: int
+    mean_risk_score: float
+    top_risk_seqs: list[int]
+    segments: list[SegmentRiskOut]
+
+
 # ---------------------------------------------------------------------------
 # Endpoint
 # ---------------------------------------------------------------------------
@@ -171,6 +194,103 @@ async def simulate_route(
     simulated_response = await _analyze_route(db, route_id, simulated_request)
 
     return SimulationResponse(simulated=simulated_response, real=real_response)
+
+
+@router.post("/analyze", response_model=BiomechanicalResponse, status_code=status.HTTP_201_CREATED)
+async def analyze_route(
+    file: UploadFile = File(..., description="GPX or GeoJSON route file"),
+    weight_kg: float = Form(default=70.0, gt=0),
+    load_kg: float = Form(default=10.0, ge=0),
+    fitness_level: FitnessLevel = Form(default=FitnessLevel.MEDIUM),
+    velocity_model: VelocityModel = Form(default=VelocityModel.TOBLER),
+    segment_length_m: float = Form(default=settings.segment_length_m, gt=0),
+    savgol_window: int = Form(default=5, gt=0),
+    db: AsyncSession = DB_DEPENDENCY,
+) -> BiomechanicalResponse:
+    """API-01: upload + process + biomechanical analysis in a single request.
+
+    Bundles what would otherwise be three calls (upload, process, biomechanical)
+    so an API client can analyze a GPX/GeoJSON route in one round trip.
+    """
+    parsed = await dat_service.parse_upload(file)
+    route = await dat_repo.save_route(
+        db,
+        name=parsed["name"],
+        source_format=parsed["source_format"],
+        geom_wkt=parsed["geom_wkt"],
+        segments_data=parsed["segments_data"],
+    )
+
+    await run_rut_pipeline(
+        db,
+        route.id,
+        segment_length_m=segment_length_m,
+        window=savgol_window,
+    )
+
+    profile = HikerProfile(
+        weight_kg=weight_kg,
+        load_kg=load_kg,
+        fitness_level=fitness_level,
+    )
+    request = BiomechanicalRequest(
+        profile=profile,
+        velocity_model=velocity_model,
+        segment_length_m=segment_length_m,
+    )
+    return await _analyze_route(db, str(route.id), request)
+
+
+@router.get("/{route_id}/risk", response_model=RouteRiskResponse)
+async def get_route_risk(
+    route_id: str,
+    db: AsyncSession = DB_DEPENDENCY,
+) -> RouteRiskResponse:
+    """API-03: return the current persisted risk index for an analyzed route.
+
+    Reads risk scores stored by the last analysis (no recomputation). Recomputes
+    the top 10% riskiest segments (RIE-10) from the persisted scores.
+    """
+    try:
+        route_uuid = uuid.UUID(route_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid route_id format. Must be a valid UUID.",
+        ) from None
+
+    rows = await rie_repo.get_persisted_risk(db, route_uuid)
+    if not rows:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"Route '{route_id}' has no persisted risk. "
+                "Analyze it first via POST /routes/analyze or /routes/{id}/biomechanical."
+            ),
+        )
+
+    scores_by_seq = {row["seq"]: row["risk_score"] for row in rows}
+    top_risk_seqs = mark_top_risk(scores_by_seq)
+    scores = [row["risk_score"] for row in rows]
+
+    segments = [
+        SegmentRiskOut(
+            seq=row["seq"],
+            risk_score=row["risk_score"],
+            is_top_risk=row["seq"] in top_risk_seqs,
+            geom=json.loads(row["geom_geojson"]) if row["geom_geojson"] else None,
+        )
+        for row in rows
+    ]
+
+    return RouteRiskResponse(
+        route_id=route_uuid,
+        segment_count=len(rows),
+        max_risk_score=max(scores),
+        mean_risk_score=round(sum(scores) / len(scores), 1),
+        top_risk_seqs=sorted(top_risk_seqs),
+        segments=segments,
+    )
 
 
 async def _resolve_climate(

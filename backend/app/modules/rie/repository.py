@@ -2,8 +2,45 @@
 
 from __future__ import annotations
 
+import uuid
+from typing import Any
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+
+async def get_persisted_risk(
+    db: AsyncSession,
+    route_id: uuid.UUID,
+) -> list[dict[str, Any]]:
+    """Return persisted per-segment risk for a route, ordered by seq. API-03, RIE-01.
+
+    Only includes segments that already have a risk score (i.e. the route has
+    been analyzed at least once). Returns seq, risk_score and GeoJSON geometry.
+    """
+    result = await db.execute(
+        text(
+            """
+            SELECT s.seq AS seq,
+                   sc.risk_score AS risk_score,
+                   ST_AsGeoJSON(s.geom)::text AS geom_geojson
+            FROM segments s
+            JOIN segment_costs sc ON sc.segment_id = s.id
+            WHERE s.route_id = :route_id
+              AND sc.risk_score IS NOT NULL
+            ORDER BY s.seq
+            """
+        ),
+        {"route_id": str(route_id)},
+    )
+    return [
+        {
+            "seq": int(row.seq),
+            "risk_score": int(row.risk_score),
+            "geom_geojson": row.geom_geojson,
+        }
+        for row in result.fetchall()
+    ]
 
 
 async def update_segment_risk_scores(db: AsyncSession, scores_by_segment_id: dict[int, int]) -> None:

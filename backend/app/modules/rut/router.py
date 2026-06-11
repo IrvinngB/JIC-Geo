@@ -19,6 +19,48 @@ DEFAULT_ROUTE_PROCESS_REQUEST = RouteProcessRequest()
 DB_DEPENDENCY = Depends(get_db)
 
 
+async def run_rut_pipeline(
+    db: AsyncSession,
+    route_uuid: uuid.UUID,
+    segment_length_m: float,
+    window: int,
+) -> dict:
+    """Run the RUT pipeline for a stored route and persist its new segments.
+
+    Shared by POST /{id}/process and the one-shot POST /routes/analyze (API-01).
+    The caller is responsible for verifying the route exists beforehand.
+
+    1. Extract raw coordinates from the stored route.
+    2. If a DEM is available, sample elevations via bilinear interpolation.
+    3. Detect and repair elevation spikes.
+    4. Apply Savitzky-Golay smoothing.
+    5. Re-segment and recalculate gradients.
+    6. Persist new segments, replacing old ones.
+    """
+    coords = await rut_repo.get_route_coords(db, route_uuid)
+    if len(coords) < 2:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Route must contain at least 2 points.",
+        )
+
+    dem_source = await rut_repo.get_best_dem_source(db)
+    dem_values = None
+    if dem_source:
+        dem_values = await rut_repo.get_dem_elevations(db, coords, dem_source.rast_table)
+
+    result = rut_service.process_route_pipeline(
+        coords,
+        dem_values=dem_values,
+        segment_length_m=segment_length_m,
+        window=window,
+    )
+
+    await rut_repo.replace_segments(db, route_uuid, result["segments"], dem_source)
+    await db.commit()
+    return result
+
+
 @router.post("/{route_id}/process", response_model=RouteProcessResponse)
 async def process_route(
     route_id: str,
@@ -27,13 +69,6 @@ async def process_route(
 ) -> RouteProcessResponse:
     """
     Re-process a route through the RUT pipeline.
-
-    1. Extract raw coordinates from the stored route.
-    2. If a DEM is available, sample elevations via bilinear interpolation.
-    3. Detect and repair elevation spikes.
-    4. Apply Savitzky-Golay smoothing.
-    5. Re-segment and recalculate gradients.
-    6. Persist new segments, replacing old ones.
     """
     try:
         route_uuid = uuid.UUID(route_id)
@@ -50,31 +85,13 @@ async def process_route(
             detail=f"Route '{route_id}' not found.",
         )
 
-    # 1. Extract coords
-    coords = await rut_repo.get_route_coords(db, route_uuid)
-    if len(coords) < 2:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Route must contain at least 2 points.",
-        )
-
-    # 2. DEM
-    dem_source = await rut_repo.get_best_dem_source(db)
-    dem_values = None
-    if dem_source:
-        dem_values = await rut_repo.get_dem_elevations(db, coords, dem_source.rast_table)
-
-    # 3–5. Pure pipeline
-    result = rut_service.process_route_pipeline(
-        coords,
-        dem_values=dem_values,
+    result = await run_rut_pipeline(
+        db,
+        route_uuid,
         segment_length_m=payload.segment_length_m,
         window=payload.savgol_window,
     )
-
-    # 6. Persist
-    await rut_repo.replace_segments(db, route_uuid, result["segments"], dem_source)
-    await db.commit()
+    dem_source = await rut_repo.get_best_dem_source(db)
 
     # Re-load segments with their DB IDs for the response
     segments_db = await rut_repo.get_segments_for_route(db, route_uuid)
