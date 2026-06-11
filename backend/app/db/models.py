@@ -145,6 +145,7 @@ class Edge(Base):
     target: Mapped[int | None] = mapped_column(BigInteger)
     segment_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("segments.id"))
     geom = mapped_column(Geometry("LINESTRINGZ", srid=4326))
+    geom_2d = mapped_column(Geometry("LINESTRING", srid=4326))
     base_cost: Mapped[float | None] = mapped_column(Float)        # ascent
     base_reverse_cost: Mapped[float | None] = mapped_column(Float)  # descent
     surface_type: Mapped[str | None] = mapped_column(String(20))
