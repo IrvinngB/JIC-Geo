@@ -1,7 +1,7 @@
 [project]
-name = "jicgeo-backend"
+name = "risktrail-backend"
 version = "0.1.0"
-description = "JIC-Geo — Dynamic Risk Index API for hiking routes"
+description = "RiskTrail — Dynamic Risk Index API for hiking routes"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115.0",

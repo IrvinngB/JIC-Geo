@@ -1,4 +1,4 @@
-# Architecture Rules — JIC-Geo
+# Architecture Rules — RiskTrail
 
 This document defines the architecture conventions and constraints that govern every code change in this repository. It applies to the backend (FastAPI / Python) and the frontend (Vue 3 / TypeScript).
 

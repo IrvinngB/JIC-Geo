@@ -1,5 +1,5 @@
 """
-SQLAlchemy ORM models for JIC-Geo.
+SQLAlchemy ORM models for RiskTrail.
 Geometric columns use GeoAlchemy2.
 Migrations are managed by Alembic — do not alter table definitions manually.
 """

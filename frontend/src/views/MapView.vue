@@ -155,7 +155,7 @@ async function applyScenario(scenario: SimulationScenario): Promise<void> {
             <h1
               class="bg-gradient-to-r from-success to-primary bg-clip-text text-2xl font-extrabold tracking-tight text-transparent"
             >
-              JIC-Geo
+              RiskTrail
             </h1>
             <p class="mt-0.5 text-xs text-base-content/60">Análisis de riesgo en senderismo</p>
           </div>

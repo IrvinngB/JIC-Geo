@@ -17,7 +17,7 @@ from app.config import settings
 from app.db.session import get_db
 from app.modules.cli import repository as cli_repo
 from app.modules.cli.schemas import ClimateData, ClimateOverride
-from app.modules.cli.service import climate_from_override
+from app.modules.cli.service import cardiovascular_drift_multiplier, climate_from_override
 from app.modules.dat import repository as dat_repo
 from app.modules.dat import service as dat_service
 from app.modules.met import repository as met_repo
@@ -398,9 +398,19 @@ async def _analyze_route(
             apply_langmuir_correction=True,
         )
 
-        # Time
-        time_h = length_km / velocity_kmh if velocity_kmh > 0 else 0.0
+        # Time. Sustained heat triggers cardiovascular drift, which the docs model
+        # as a degradation of marching velocity (Formulas §3.1; issues.md: "aplicar
+        # degradación de velocidad por estrés cardiovascular"). The drift extends
+        # traversal time — i.e. lowers effective velocity. WBGT integrates
+        # temperature, humidity and solar radiation (§3.2), so every climate driver
+        # funnels through it; there is no separate humidity/UV velocity term in the
+        # docs. cv_drift is 1.0 below 20 min or the WBGT threshold, leaving cool or
+        # short segments unchanged.
+        nominal_time_h = length_km / velocity_kmh if velocity_kmh > 0 else 0.0
+        cv_drift = cardiovascular_drift_multiplier(elapsed_time_min, climate.wbgt)
+        time_h = nominal_time_h * cv_drift
         time_min = time_h * 60.0
+        effective_velocity_kmh = length_km / time_h if time_h > 0 else velocity_kmh
 
         # MET: Minetti CoT
         cot, cot_method = minetti_cot(slope)
@@ -480,7 +490,7 @@ async def _analyze_route(
                 seq=seg.seq,
                 slope_pct=round(slope, 2),
                 direction="ascent" if slope > 0 else "descent",
-                velocity_kmh=round(velocity_kmh, 2),
+                velocity_kmh=round(effective_velocity_kmh, 2),
                 velocity_model=payload.velocity_model.value,
                 cot_j_per_kg_m=round(cot_j_per_kg_m, 2),
                 cot_method=cot_method,

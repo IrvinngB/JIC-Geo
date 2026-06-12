@@ -8,6 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
+from app.modules.cli.schemas import ClimateData
+from app.modules.cli.service import climate_from_override
 from app.modules.grf import repository as grf_repo
 from app.modules.grf.schemas import (
     GraphEdge,
@@ -18,6 +20,7 @@ from app.modules.grf.schemas import (
     RouteGraphResponse,
 )
 from app.modules.grf.service import build_node_pairs
+from app.modules.sim.service import resolve_simulation_climate
 
 router = APIRouter()
 DB_DEPENDENCY = Depends(get_db)
@@ -66,9 +69,27 @@ async def optimal_path(
     payload: OptimalPathRequest,
     db: AsyncSession = DB_DEPENDENCY,
 ) -> OptimalPathResponse:
-    """Return the lowest-cost route between graph nodes. API-06, GRF-03, GRF-04, GRF-07"""
+    """Return the lowest-cost route between graph nodes. API-06, GRF-03, GRF-04, GRF-07, SIM-01
+
+    A scenario or manual climate override reroutes under simulated weather;
+    omitting both routes under the real climate in climate_zones.
+    """
     await grf_repo.sync_edges_from_segments(db)
     await grf_repo.create_topology(db)
+
+    # Resolve simulated climate, if any, so it can steer the routing itself.
+    sim_climate: ClimateData | None = None
+    if payload.scenario is not None or payload.climate is not None:
+        try:
+            override = resolve_simulation_climate(payload.scenario, payload.climate)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
+        sim_climate = climate_from_override(override)
+    wbgt = sim_climate.wbgt if sim_climate else None
+    precip_mm = sim_climate.precip_mm if sim_climate else None
 
     all_steps: list[PathStep] = []
     total_cost = 0.0
@@ -78,7 +99,9 @@ async def optimal_path(
         payload.end_node,
         payload.waypoints,
     ):
-        rows = await grf_repo.shortest_path(db, start_node, end_node, payload.algorithm)
+        rows = await grf_repo.shortest_path(
+            db, start_node, end_node, payload.algorithm, wbgt=wbgt, precip_mm=precip_mm
+        )
         if not rows:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -104,5 +127,6 @@ async def optimal_path(
         end_node=payload.end_node,
         waypoints=payload.waypoints,
         total_cost=round(total_cost, 4),
+        climate_source=sim_climate.source if sim_climate else "api",
         steps=all_steps,
     )

@@ -62,7 +62,7 @@ const steps = [
           <span
             class="bg-gradient-to-r from-success to-primary bg-clip-text text-xl font-extrabold tracking-tight text-transparent"
           >
-            JIC-Geo
+            RiskTrail
           </span>
         </div>
         <div class="flex items-center gap-2">
@@ -108,7 +108,7 @@ const steps = [
             </span>
           </h1>
           <p class="mt-6 max-w-2xl text-lg text-base-content/70">
-            JIC-Geo convierte tu GPX en un índice dinámico de riesgo: esfuerzo real tramo a tramo,
+            RiskTrail convierte tu GPX en un índice dinámico de riesgo: esfuerzo real tramo a tramo,
             simulación de clima y la ruta de menor costo sobre el mapa.
           </p>
           <div class="mt-8 flex flex-wrap gap-3">
@@ -220,7 +220,7 @@ const steps = [
       >
         <div class="flex items-center gap-2">
           <AppIcon name="mountain" :size="16" class="text-primary" />
-          <span class="font-semibold text-base-content/70">JIC-Geo</span>
+          <span class="font-semibold text-base-content/70">RiskTrail</span>
           <span>· Índice dinámico de riesgo en senderismo</span>
         </div>
         <RouterLink to="/mapa" class="link link-hover text-primary">Abrir la app</RouterLink>

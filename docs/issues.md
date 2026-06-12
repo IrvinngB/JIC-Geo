@@ -1,6 +1,6 @@
-# Backlog de Issues — JIC-Geo
+# Backlog de Issues — RiskTrail
 
-Este documento define los issues de GitHub que representan las fases restantes del proyecto JIC-Geo. Cada issue sigue la convención de Conventional Commits e incluye descripción detallada, criterios de aceptación (Definición de Hecho) y módulos afectados.
+Este documento define los issues de GitHub que representan las fases restantes del proyecto RiskTrail. Cada issue sigue la convención de Conventional Commits e incluye descripción detallada, criterios de aceptación (Definición de Hecho) y módulos afectados.
 
 ---
 

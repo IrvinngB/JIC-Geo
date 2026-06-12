@@ -1,6 +1,6 @@
-# JIC-Geo — Índice Dinámico de Riesgo en Senderismo
+# RiskTrail — Índice Dinámico de Riesgo en Senderismo
 
-JIC-Geo es un Sistema de Información Geográfica (SIG) y motor de enrutamiento que calcula un índice dinámico de riesgo para rutas de senderismo. Correlaciona modelos biométricos (costo metabólico, perfiles de velocidad) con datos espaciales (elevaciones DEM, gradientes) y condiciones meteorológicas en tiempo real (WBGT, precipitación) para identificar problemas de seguridad y diseñar rutas óptimas con enrutamiento adaptado al clima.
+RiskTrail es un Sistema de Información Geográfica (SIG) y motor de enrutamiento que calcula un índice dinámico de riesgo para rutas de senderismo. Correlaciona modelos biométricos (costo metabólico, perfiles de velocidad) con datos espaciales (elevaciones DEM, gradientes) y condiciones meteorológicas en tiempo real (WBGT, precipitación) para identificar problemas de seguridad y diseñar rutas óptimas con enrutamiento adaptado al clima.
 
 ---
 
@@ -18,7 +18,7 @@ JIC-Geo es un Sistema de Información Geográfica (SIG) y motor de enrutamiento 
 ## Estructura de Directorios
 
 ```
-JIC-Geo/
+RiskTrail/
 ├── backend/                  # API REST FastAPI y tests unitarios
 │   ├── app/
 │   │   ├── api/v1/           # Rutas de la API (endpoints REST)

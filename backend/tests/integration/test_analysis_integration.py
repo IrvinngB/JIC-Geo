@@ -65,6 +65,52 @@ async def test_biomechanical_analysis_success(
 
 
 @pytest.mark.asyncio
+async def test_extreme_heat_slows_hiker(
+    client: AsyncClient,
+) -> None:
+    """Sustained heat degrades velocity, extending time vs a cool scenario.
+
+    Doc basis: Formulas §3.1 cardiovascular drift; issues.md "aplicar degradación
+    de velocidad por estrés cardiovascular". WBGT (which integrates temperature,
+    humidity and solar radiation, §3.2) is the single driver. Needs a route long
+    enough (>20 min) for the drift threshold to engage on later segments.
+    """
+    # ~4 km flat route → ~50 min on foot, well past the 20-min drift threshold.
+    coords = [[-79.50 - index * 0.005, 9.0, 100.0] for index in range(9)]
+    geojson_data = {
+        "type": "Feature",
+        "properties": {"name": "Heat Test"},
+        "geometry": {"type": "LineString", "coordinates": coords},
+    }
+    files = {
+        "file": ("heat.geojson", json.dumps(geojson_data).encode("utf-8"), "application/json"),
+    }
+    upload = await client.post("/api/v1/routes/upload", files=files)
+    assert upload.status_code == 201
+    route_id = upload.json()["route_id"]
+
+    process = await client.post(f"/api/v1/routes/{route_id}/process")
+    assert process.status_code == 200
+
+    base = {
+        "profile": {"weight_kg": 70, "load_kg": 10, "fitness_level": "medium"},
+        "velocity_model": "tobler",
+    }
+    cool = await client.post(f"/api/v1/routes/{route_id}/simulate", json={**base, "scenario": "dry"})
+    hot = await client.post(
+        f"/api/v1/routes/{route_id}/simulate", json={**base, "scenario": "extreme_heat"}
+    )
+    assert cool.status_code == 200
+    assert hot.status_code == 200
+
+    time_cool = cool.json()["simulated"]["summary"]["estimated_time_h"]
+    time_hot = hot.json()["simulated"]["summary"]["estimated_time_h"]
+    # Heat must cost real time (and therefore energy/fatigue), not just risk score.
+    assert time_hot > time_cool
+    assert hot.json()["simulated"]["summary"]["total_kcal"] > cool.json()["simulated"]["summary"]["total_kcal"]
+
+
+@pytest.mark.asyncio
 async def test_biomechanical_analysis_invalid_route(
     client: AsyncClient,
 ) -> None:

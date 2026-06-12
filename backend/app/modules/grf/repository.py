@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import uuid
 from typing import Any
 
@@ -10,6 +11,22 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
+
+
+def _sql_float(value: float) -> str:
+    """Render a finite float as a SQL numeric literal — the only injection-safe
+    way to push a simulated climate value across pgRouting's text boundary.
+
+    pgr_bdAstar/pgr_dijkstra take the edge query as a *string*, so bound params
+    never reach inside it. A Python float's repr is always a numeric token
+    (never a quote or statement), so interpolating it cannot inject SQL. The
+    finiteness guard rejects inf/nan, which would otherwise render as bare
+    identifiers and fail inside the multiplier call.
+    """
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError("Climate override values must be finite numbers.")
+    return repr(number)
 
 
 async def create_topology(db: AsyncSession, tolerance: float = 0.00001) -> None:
@@ -71,23 +88,42 @@ async def sync_edges_from_segments(db: AsyncSession) -> None:
     )
 
 
-def _edge_sql() -> str:
-    return """
+def _edge_sql(wbgt: float | None = None, precip_mm: float | None = None) -> str:
+    """Edge cost query for pgRouting. GRF-03, GRF-04, GRF-10.
+
+    Real climate (wbgt/precip None): values come from the climate_zones JOIN —
+    the persisted, trigger-updated dynamic cost layer (Formulas §7.5, GRF-05/06).
+
+    Simulated climate (wbgt/precip given): values are request-scoped literals and
+    the zone is bypassed entirely — a what-if, not the world (SIM-01). Either way
+    the static geometry is never touched (Formulas §7.2); only the climate source
+    of the multiplier changes, so the cost/reverse_cost asymmetry (§5) holds.
+    """
+    if wbgt is None or precip_mm is None:
+        wbgt_expr = "COALESCE(cz.wbgt, 25.0)"
+        precip_expr = "COALESCE(cz.precip_mm, 0.0)"
+        climate_join = "LEFT JOIN climate_zones cz ON ST_Intersects(e.geom_2d, cz.geom)"
+    else:
+        wbgt_expr = _sql_float(wbgt)
+        precip_expr = _sql_float(precip_mm)
+        climate_join = ""
+
+    return f"""
         SELECT
           e.id,
           e.source,
           e.target,
           GREATEST(0.0001, COALESCE(e.base_cost, 1.0))
             * climate_cost_multiplier(
-                COALESCE(cz.wbgt, 25.0),
-                COALESCE(cz.precip_mm, 0.0),
+                {wbgt_expr},
+                {precip_expr},
                 COALESCE(e.slope_pct, 0.0),
                 COALESCE(e.canopy_density, 0.5)
               ) AS cost,
           GREATEST(0.0001, COALESCE(e.base_reverse_cost, 1.0))
             * climate_cost_multiplier(
-                COALESCE(cz.wbgt, 25.0),
-                COALESCE(cz.precip_mm, 0.0),
+                {wbgt_expr},
+                {precip_expr},
                 -COALESCE(e.slope_pct, 0.0),
                 COALESCE(e.canopy_density, 0.5)
               ) AS reverse_cost,
@@ -96,7 +132,7 @@ def _edge_sql() -> str:
           ST_X(ST_EndPoint(e.geom_2d)) AS x2,
           ST_Y(ST_EndPoint(e.geom_2d)) AS y2
         FROM edges e
-        LEFT JOIN climate_zones cz ON ST_Intersects(e.geom_2d, cz.geom)
+        {climate_join}
         WHERE e.source IS NOT NULL AND e.target IS NOT NULL
     """
 
@@ -106,9 +142,15 @@ async def shortest_path(
     start_node: int,
     end_node: int,
     algorithm: str = "astar",
+    wbgt: float | None = None,
+    precip_mm: float | None = None,
 ) -> list[dict[str, Any]]:
-    """Run A* bidirectional or Dijkstra with climate multiplier on-the-fly. GRF-03, GRF-04, GRF-06"""
-    edge_sql = _edge_sql()
+    """Run A* bidirectional or Dijkstra with climate multiplier on-the-fly. GRF-03, GRF-04, GRF-06
+
+    Passing wbgt/precip_mm reroutes under simulated climate (SIM-01); leaving them
+    None routes under the real climate persisted in climate_zones.
+    """
+    edge_sql = _edge_sql(wbgt, precip_mm)
     query = (
         """
         SELECT seq, node, edge, cost, agg_cost

@@ -7,7 +7,7 @@ from app.api.v1.router import api_router
 
 def create_app() -> FastAPI:
     app = FastAPI(
-        title="JIC-Geo API",
+        title="RiskTrail API",
         description="Dynamic Risk Index for hiking routes — PostGIS + pgRouting backend",
         version="0.1.0",
         docs_url="/docs" if settings.is_development else None,
