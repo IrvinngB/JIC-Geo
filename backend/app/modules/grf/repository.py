@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import Any
 
 from sqlalchemy import text
@@ -12,7 +13,14 @@ logger = logging.getLogger(__name__)
 
 
 async def create_topology(db: AsyncSession, tolerance: float = 0.00001) -> None:
-    """Create pgRouting topology over edges. GRF-01"""
+    """Create pgRouting topology over edges. GRF-01
+
+    Runs incrementally (clean := false, the pgRouting default): edges whose
+    source/target are already set keep their vertex ids. With clean := true,
+    every call truncates edges_vertices_pgr and reassigns vertex ids from
+    scratch, so node ids returned by /graph would go stale as soon as
+    /optimal-path re-runs this — both endpoints call it on every request.
+    """
     await db.execute(
         text(
             """
@@ -22,8 +30,7 @@ async def create_topology(db: AsyncSession, tolerance: float = 0.00001) -> None:
                 'geom_2d',
                 'id',
                 'source',
-                'target',
-                clean := true
+                'target'
             )
             """
         ),
@@ -126,6 +133,50 @@ async def shortest_path(
     result = await db.execute(
         text(query),
         {"edge_sql": edge_sql, "start_node": start_node, "end_node": end_node},
+    )
+    return [dict(row) for row in result.mappings().all()]
+
+
+async def get_route_nodes(db: AsyncSession, route_id: uuid.UUID) -> list[dict[str, Any]]:
+    """Return topology vertices touching this route's edges, with coordinates.
+
+    Needed because pgRouting vertex ids (edges_vertices_pgr.id) are opaque
+    integers with no map-friendly representation otherwise.
+    """
+    result = await db.execute(
+        text(
+            """
+            SELECT DISTINCT v.id, ST_X(v.the_geom) AS lon, ST_Y(v.the_geom) AS lat
+            FROM edges_vertices_pgr v
+            JOIN edges e ON v.id = e.source OR v.id = e.target
+            JOIN segments s ON s.id = e.segment_id
+            WHERE s.route_id = :route_id
+            ORDER BY v.id
+            """
+        ),
+        {"route_id": str(route_id)},
+    )
+    return [dict(row) for row in result.mappings().all()]
+
+
+async def get_route_edges(db: AsyncSession, route_id: uuid.UUID) -> list[dict[str, Any]]:
+    """Return topology edges for this route, mapped back to segment seq.
+
+    Lets the frontend translate optimal-path steps (which reference edge ids)
+    into segment geometries it already has for rendering.
+    """
+    result = await db.execute(
+        text(
+            """
+            SELECT e.id, s.seq, e.source, e.target
+            FROM edges e
+            JOIN segments s ON s.id = e.segment_id
+            WHERE s.route_id = :route_id
+              AND e.source IS NOT NULL AND e.target IS NOT NULL
+            ORDER BY s.seq
+            """
+        ),
+        {"route_id": str(route_id)},
     )
     return [dict(row) for row in result.mappings().all()]
 

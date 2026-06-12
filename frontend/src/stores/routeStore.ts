@@ -5,7 +5,7 @@
 
 import { computed, ref } from "vue";
 import { defineStore } from "pinia";
-import type { LineString } from "geojson";
+import type { Feature, FeatureCollection, LineString } from "geojson";
 import type { HikerProfile } from "@/composables/useHikerProfile";
 
 export interface MideDimensions {
@@ -159,6 +159,46 @@ export type SimulationScenario =
   | "extreme_heat"
   | "night";
 
+/** GRF-01: pgRouting topology vertex, for map-based start/end/waypoint pickers. */
+export interface GraphNode {
+  id: number;
+  lon: number;
+  lat: number;
+}
+
+/** GRF-01: pgRouting topology edge, mapped back to its source segment via seq. */
+export interface GraphEdge {
+  id: number;
+  seq: number;
+  source: number;
+  target: number;
+}
+
+export interface RouteGraph {
+  route_id: string;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+export type RoutingAlgorithm = "astar" | "dijkstra";
+
+export interface OptimalPathStep {
+  seq: number;
+  node: number;
+  edge: number;
+  cost: number;
+  agg_cost: number;
+}
+
+export interface OptimalPathResult {
+  algorithm: RoutingAlgorithm;
+  start_node: number;
+  end_node: number;
+  waypoints: number[];
+  total_cost: number;
+  steps: OptimalPathStep[];
+}
+
 const API_BASE = "/api/v1";
 
 async function parseApiError(response: Response): Promise<string> {
@@ -203,6 +243,8 @@ export const useRouteStore = defineStore("route", () => {
   const isSimulationMode = ref(false);
   const currentProfile = ref<HikerProfile | null>(null);
   const climateComparison = ref<ClimateComparison | null>(null);
+  const routeGraph = ref<RouteGraph | null>(null);
+  const optimalPath = ref<OptimalPathResult | null>(null);
 
   const selectedSegment = computed(
     () =>
@@ -216,6 +258,32 @@ export const useRouteStore = defineStore("route", () => {
       analysis.value?.segments.filter((segment) => segment.is_top_risk) ?? [],
   );
 
+  /** GRF-07: maps optimal-path steps (edge ids) back to segment geometries for rendering. */
+  const optimalPathFeatures = computed<FeatureCollection<LineString> | null>(() => {
+    if (!optimalPath.value || !routeGraph.value || !analysis.value) return null;
+
+    const edgeSeqById = new Map(
+      routeGraph.value.edges.map((edge) => [edge.id, edge.seq]),
+    );
+    const segmentGeomBySeq = new Map(
+      analysis.value.segments
+        .filter((segment) => segment.geom)
+        .map((segment) => [segment.seq, segment.geom as LineString]),
+    );
+
+    const features: Feature<LineString>[] = [];
+    for (const step of optimalPath.value.steps) {
+      if (step.edge < 0) continue;
+      const seq = edgeSeqById.get(step.edge);
+      if (seq === undefined) continue;
+      const geom = segmentGeomBySeq.get(seq);
+      if (!geom) continue;
+      features.push({ type: "Feature", properties: { seq: step.seq }, geometry: geom });
+    }
+
+    return { type: "FeatureCollection", features };
+  });
+
   async function uploadAndAnalyze(
     file: File,
     profile: HikerProfile,
@@ -224,6 +292,8 @@ export const useRouteStore = defineStore("route", () => {
     error.value = null;
     selectedSegmentSeq.value = null;
     currentProfile.value = { ...profile };
+    routeGraph.value = null;
+    optimalPath.value = null;
 
     try {
       const upload = await uploadRoute(file);
@@ -434,6 +504,64 @@ export const useRouteStore = defineStore("route", () => {
     }
   }
 
+  /** GRF-01: fetch graph topology (nodes + edges) so a map UI can pick routing nodes. */
+  async function loadRouteGraph(): Promise<void> {
+    if (!analysis.value) return;
+
+    isLoading.value = true;
+    error.value = null;
+    try {
+      const response = await fetch(
+        `${API_BASE}/routes/${analysis.value.route_id}/graph`,
+      );
+      if (!response.ok)
+        throw new Error(`Graph load failed: ${await parseApiError(response)}`);
+      routeGraph.value = (await response.json()) as RouteGraph;
+    } catch (err) {
+      error.value =
+        err instanceof Error ? err.message : "Error desconocido al cargar el grafo";
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  /** GRF-03, GRF-04, GRF-07: compute the lowest-cost route between graph nodes. */
+  async function computeOptimalPath(payload: {
+    startNode: number;
+    endNode: number;
+    waypoints?: number[];
+    algorithm?: RoutingAlgorithm;
+  }): Promise<void> {
+    isLoading.value = true;
+    error.value = null;
+    try {
+      const response = await fetch(`${API_BASE}/routes/optimal-path`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          start_node: payload.startNode,
+          end_node: payload.endNode,
+          waypoints: payload.waypoints ?? [],
+          algorithm: payload.algorithm ?? "astar",
+        }),
+      });
+      if (!response.ok)
+        throw new Error(`Optimal path failed: ${await parseApiError(response)}`);
+      optimalPath.value = (await response.json()) as OptimalPathResult;
+    } catch (err) {
+      error.value =
+        err instanceof Error
+          ? err.message
+          : "Error desconocido al calcular la ruta óptima";
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  function clearOptimalPath(): void {
+    optimalPath.value = null;
+  }
+
   function selectSegment(seq: number | null): void {
     selectedSegmentSeq.value = seq;
   }
@@ -445,6 +573,8 @@ export const useRouteStore = defineStore("route", () => {
     isSimulationMode.value = false;
     currentProfile.value = null;
     climateComparison.value = null;
+    routeGraph.value = null;
+    optimalPath.value = null;
   }
 
   return {
@@ -455,9 +585,15 @@ export const useRouteStore = defineStore("route", () => {
     highRiskSegments,
     isSimulationMode,
     climateComparison,
+    routeGraph,
+    optimalPath,
+    optimalPathFeatures,
     uploadAndAnalyze,
     runSimulation,
     refreshRealClimate,
+    loadRouteGraph,
+    computeOptimalPath,
+    clearOptimalPath,
     selectSegment,
     reset,
   };

@@ -11,7 +11,13 @@
 
 html, body, #app {
   width: 100%;
-  height: 100%;
-  overflow: hidden;
+  min-height: 100%;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* The map view opts into a fixed, non-scrolling viewport via this class so the
+   landing page (and any future scrollable page) keeps natural vertical scroll. */
+.app-fixed-viewport {
+  height: 100vh;
+  overflow: hidden;
 }

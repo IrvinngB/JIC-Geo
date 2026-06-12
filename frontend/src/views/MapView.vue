@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { RouterLink } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import RouteMap from '@/components/map/RouteMap.vue'
 import HikerProfileForm from '@/components/sidebar/HikerProfileForm.vue'
@@ -7,8 +8,11 @@ import RouteSummary from '@/components/sidebar/RouteSummary.vue'
 import FileUploader from '@/components/upload/FileUploader.vue'
 import ClimateSliders from '@/components/simulation/ClimateSliders.vue'
 import ClimateToggle from '@/components/simulation/ClimateToggle.vue'
+import RoutePlanner from '@/components/routing/RoutePlanner.vue'
+import AppIcon from '@/components/icons/AppIcon.vue'
 import { useHikerProfile } from '@/composables/useHikerProfile'
 import { useSimulation } from '@/composables/useSimulation'
+import { useRoutePlanner } from '@/composables/useRoutePlanner'
 import { useTheme } from '@/composables/useTheme'
 import { useRouteStore } from '@/stores/routeStore'
 import type { ClimateOverride, SimulationScenario } from '@/stores/routeStore'
@@ -18,8 +22,37 @@ const { currentTheme, toggleTheme } = useTheme()
 const { profile, isValid } = useHikerProfile()
 const simulation = useSimulation()
 const routeStore = useRouteStore()
-const { analysis, error, isLoading, selectedSegment, climateComparison } =
-  storeToRefs(routeStore)
+const {
+  analysis,
+  error,
+  isLoading,
+  selectedSegment,
+  climateComparison,
+  routeGraph,
+  optimalPath,
+  optimalPathFeatures,
+} = storeToRefs(routeStore)
+
+const routePlanner = useRoutePlanner()
+const {
+  isActive: routingActive,
+  algorithm: routingAlgorithm,
+  start: routingStart,
+  end: routingEnd,
+  waypoints: routingWaypoints,
+  canCompute: canComputeRoute,
+  toggleNode: toggleRoutingNode,
+  clear: clearRouting,
+  compute: computeOptimalRoute,
+} = routePlanner
+
+async function toggleRouting(): Promise<void> {
+  if (routingActive.value) {
+    routePlanner.deactivate()
+  } else {
+    await routePlanner.activate()
+  }
+}
 
 // On mobile the side panel becomes a bottom sheet. This drives its open state;
 // on desktop (md+) it is ignored because the panel is a static sidebar.
@@ -112,22 +145,28 @@ async function applyScenario(scenario: SimulationScenario): Promise<void> {
       </button>
 
       <div class="flex items-center justify-between border-b border-base-100 p-5">
-        <div>
-          <h1
-            class="bg-gradient-to-r from-success to-primary bg-clip-text text-2xl font-extrabold tracking-tight text-transparent"
+        <RouterLink to="/" class="group flex items-center gap-2" title="Volver al inicio">
+          <span
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition group-hover:bg-primary/20"
           >
-            JIC-Geo
-          </h1>
-          <p class="mt-1 text-xs text-base-content/60">Índice dinámico de riesgo en senderismo</p>
-        </div>
+            <AppIcon name="mountain" :size="18" />
+          </span>
+          <div>
+            <h1
+              class="bg-gradient-to-r from-success to-primary bg-clip-text text-2xl font-extrabold tracking-tight text-transparent"
+            >
+              JIC-Geo
+            </h1>
+            <p class="mt-0.5 text-xs text-base-content/60">Análisis de riesgo en senderismo</p>
+          </div>
+        </RouterLink>
         <div class="flex items-center gap-2">
           <button
             class="btn btn-ghost btn-circle btn-sm text-base-content/60 hover:text-base-content"
             title="Cambiar tema"
             @click="toggleTheme"
           >
-            <span v-if="currentTheme === 'jic-dark'">☀️</span>
-            <span v-else>🌙</span>
+            <AppIcon :name="currentTheme === 'jic-dark' ? 'sun' : 'moon'" :size="18" />
           </button>
           <div class="badge badge-success badge-outline text-xs">FE alpha</div>
         </div>
@@ -163,6 +202,23 @@ async function applyScenario(scenario: SimulationScenario): Promise<void> {
           @update:model-value="updateClimate"
           @scenario="applyScenario"
           @run="simulation.runSimulation"
+        />
+
+        <RoutePlanner
+          v-if="analysis"
+          :is-active="routingActive"
+          :algorithm="routingAlgorithm"
+          :start="routingStart"
+          :end="routingEnd"
+          :waypoints="routingWaypoints"
+          :can-compute="canComputeRoute"
+          :optimal-path="optimalPath"
+          :disabled="isLoading"
+          @toggle-active="toggleRouting"
+          @update:algorithm="routingAlgorithm = $event"
+          @remove-node="toggleRoutingNode"
+          @compute="computeOptimalRoute"
+          @clear="clearRouting"
         />
 
         <section v-if="selectedSegment" class="card bg-base-100 shadow-md">
@@ -222,7 +278,14 @@ async function applyScenario(scenario: SimulationScenario): Promise<void> {
       <RouteMap
         :analysis="analysis"
         :selected-seq="selectedSegment?.seq ?? null"
+        :graph="routeGraph"
+        :routing-active="routingActive"
+        :routing-start="routingStart"
+        :routing-end="routingEnd"
+        :routing-waypoints="routingWaypoints"
+        :optimal-path-features="optimalPathFeatures"
         @select-segment="routeStore.selectSegment"
+        @toggle-routing-node="toggleRoutingNode"
       />
     </main>
   </div>

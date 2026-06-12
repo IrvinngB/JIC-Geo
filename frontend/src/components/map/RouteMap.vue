@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import maplibregl, { type StyleSpecification } from 'maplibre-gl'
-import type { Feature, FeatureCollection, LineString } from 'geojson'
-import type { RouteAnalysis } from '@/stores/routeStore'
+import type { Feature, FeatureCollection, LineString, Point } from 'geojson'
+import type { RouteAnalysis, RouteGraph } from '@/stores/routeStore'
+import AppIcon from '@/components/icons/AppIcon.vue'
 
 type BaseMapId = 'streets' | 'topo' | 'satellite'
 
@@ -47,10 +48,17 @@ const BASE_MAPS: BaseMapOption[] = [
 const props = defineProps<{
   analysis: RouteAnalysis | null
   selectedSeq: number | null
+  graph: RouteGraph | null
+  routingActive: boolean
+  routingStart: number | null
+  routingEnd: number | null
+  routingWaypoints: number[]
+  optimalPathFeatures: FeatureCollection<LineString> | null
 }>()
 
 const emit = defineEmits<{
   selectSegment: [seq: number | null]
+  toggleRoutingNode: [nodeId: number]
 }>()
 
 const mapContainer = ref<HTMLDivElement | null>(null)
@@ -85,6 +93,7 @@ onMounted(() => {
   map.on('load', () => {
     applyTerrainMode()
     renderRouteLayer()
+    renderRoutingLayers()
   })
 })
 
@@ -116,12 +125,34 @@ watch(selectedBaseMap, () => {
   map.once('style.load', () => {
     applyTerrainMode()
     renderRouteLayer()
+    renderRoutingLayers()
   })
 })
 
 watch(terrainEnabled, () => {
   applyTerrainMode()
 })
+
+watch(
+  () => props.graph,
+  () => renderRoutingLayers(),
+)
+
+watch(
+  () => [props.routingStart, props.routingEnd, props.routingWaypoints],
+  () => renderRoutingLayers(),
+  { deep: true },
+)
+
+watch(
+  () => props.optimalPathFeatures,
+  () => renderRoutingLayers(),
+)
+
+watch(
+  () => props.routingActive,
+  () => setRoutingVisibility(),
+)
 
 function buildMapStyle(baseMap: BaseMapOption): StyleSpecification {
   return {
@@ -311,6 +342,113 @@ function recenterRoute(): void {
   hasFitRoute = true
 }
 
+function routingNodeRole(nodeId: number): 'start' | 'end' | 'waypoint' | 'idle' {
+  if (nodeId === props.routingStart) return 'start'
+  if (nodeId === props.routingEnd) return 'end'
+  if (props.routingWaypoints.includes(nodeId)) return 'waypoint'
+  return 'idle'
+}
+
+function buildGraphNodesFeatureCollection(): FeatureCollection<Point> {
+  const features: Array<Feature<Point>> =
+    props.graph?.nodes.map((node) => ({
+      type: 'Feature',
+      properties: {
+        id: node.id,
+        role: routingNodeRole(node.id),
+      },
+      geometry: {
+        type: 'Point',
+        coordinates: [node.lon, node.lat],
+      },
+    })) ?? []
+
+  return { type: 'FeatureCollection', features }
+}
+
+function renderRoutingLayers(): void {
+  if (!map?.isStyleLoaded()) return
+
+  const nodesData = buildGraphNodesFeatureCollection()
+  const nodesSource = map.getSource('routing-nodes') as maplibregl.GeoJSONSource | undefined
+
+  if (nodesSource) {
+    nodesSource.setData(nodesData)
+  } else {
+    map.addSource('routing-nodes', { type: 'geojson', data: nodesData })
+
+    map.addLayer({
+      id: 'routing-nodes-circle',
+      type: 'circle',
+      source: 'routing-nodes',
+      layout: {
+        visibility: props.routingActive ? 'visible' : 'none',
+      },
+      paint: {
+        'circle-radius': ['match', ['get', 'role'], 'start', 9, 'end', 9, 'waypoint', 7, 5],
+        'circle-color': [
+          'match',
+          ['get', 'role'],
+          'start',
+          '#22c55e',
+          'end',
+          '#ef4444',
+          'waypoint',
+          '#3b82f6',
+          '#94a3b8',
+        ],
+        'circle-stroke-width': 2,
+        'circle-stroke-color': '#ffffff',
+      },
+    })
+
+    map.on('click', 'routing-nodes-circle', (event) => {
+      const id = event.features?.[0]?.properties?.id
+      emit('toggleRoutingNode', typeof id === 'number' ? id : Number(id))
+    })
+  }
+
+  const pathData: FeatureCollection<LineString> =
+    props.optimalPathFeatures ?? { type: 'FeatureCollection', features: [] }
+  const pathSource = map.getSource('optimal-path') as maplibregl.GeoJSONSource | undefined
+
+  if (pathSource) {
+    pathSource.setData(pathData)
+  } else {
+    map.addSource('optimal-path', { type: 'geojson', data: pathData })
+
+    map.addLayer({
+      id: 'optimal-path-line',
+      type: 'line',
+      source: 'optimal-path',
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        visibility: props.routingActive ? 'visible' : 'none',
+      },
+      paint: {
+        'line-width': 6,
+        'line-color': '#a855f7',
+        'line-dasharray': [0.2, 1.5],
+      },
+    })
+  }
+
+  setRoutingVisibility()
+}
+
+function setRoutingVisibility(): void {
+  if (!map?.isStyleLoaded()) return
+
+  const visibility = props.routingActive ? 'visible' : 'none'
+  if (map.getLayer('routing-nodes-circle')) {
+    map.setLayoutProperty('routing-nodes-circle', 'visibility', visibility)
+  }
+  if (map.getLayer('optimal-path-line')) {
+    map.setLayoutProperty('optimal-path-line', 'visibility', visibility)
+  }
+}
+
 function flyToSegment(seq: number | null): void {
   if (!map || seq === null) return
 
@@ -380,10 +518,23 @@ function riskBadgeClass(score: number): string {
     </div>
 
     <div class="pointer-events-none absolute inset-x-4 top-4 flex flex-col gap-3 md:inset-x-auto md:left-4 md:w-80">
-      <div v-if="!props.analysis" class="alert bg-base-100/90 shadow-lg backdrop-blur">
-        <div>
-          <h3 class="font-bold">Carga una ruta</h3>
-          <p class="text-xs text-base-content/70">El mapa se actualizará después del análisis.</p>
+      <div
+        v-if="!props.analysis"
+        class="rounded-2xl border border-base-300/60 bg-base-100/90 p-4 shadow-lg backdrop-blur"
+      >
+        <div class="flex items-start gap-3">
+          <span
+            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"
+          >
+            <AppIcon name="map" :size="20" />
+          </span>
+          <div>
+            <h3 class="font-bold">Carga una ruta para empezar</h3>
+            <p class="mt-1 text-xs text-base-content/70">
+              Sube tu GPX o GeoJSON en el panel. El mapa mostrará el recorrido coloreado por riesgo
+              en cuanto termine el análisis.
+            </p>
+          </div>
         </div>
       </div>
 

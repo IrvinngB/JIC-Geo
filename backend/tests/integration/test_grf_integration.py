@@ -1,22 +1,15 @@
-"""Integration tests for GRF — pgRouting optimal path."""
+"""Integration tests for GRF — graph topology and pgRouting optimal path."""
 
 from __future__ import annotations
 
 import json
+import uuid
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.modules.grf import repository as grf_repo
 
 
-@pytest.mark.asyncio
-async def test_optimal_path_success(
-    client: AsyncClient,
-    db_session: AsyncSession,
-) -> None:
+async def _upload_and_analyze_route(client: AsyncClient) -> str:
     geojson_data = {
         "type": "Feature",
         "properties": {"name": "Routing Test"},
@@ -46,20 +39,27 @@ async def test_optimal_path_success(
     )
     assert analysis_response.status_code == 200
 
-    await grf_repo.sync_edges_from_segments(db_session)
-    await grf_repo.create_topology(db_session)
-    nodes_result = await db_session.execute(
-        text(
-            """
-            SELECT source, target
-            FROM edges
-            WHERE source IS NOT NULL AND target IS NOT NULL
-            ORDER BY id
-            LIMIT 1
-            """
-        )
-    )
-    edge = nodes_result.mappings().one()
+    return route_id
+
+
+@pytest.mark.asyncio
+async def test_route_graph_and_optimal_path(client: AsyncClient) -> None:
+    route_id = await _upload_and_analyze_route(client)
+
+    graph_response = await client.get(f"/api/v1/routes/{route_id}/graph")
+    assert graph_response.status_code == 200
+    graph = graph_response.json()
+    assert graph["route_id"] == route_id
+    assert len(graph["nodes"]) >= 2
+    assert len(graph["edges"]) >= 1
+
+    # Contract the frontend relies on: each graph edge maps to a distinct segment
+    # seq, so optimal-path steps can be translated back into segment geometries
+    # (routeStore.optimalPathFeatures). Seq must therefore be unique per edge.
+    edge_seqs = [e["seq"] for e in graph["edges"]]
+    assert len(edge_seqs) == len(set(edge_seqs))
+
+    edge = graph["edges"][0]
 
     response = await client.post(
         "/api/v1/routes/optimal-path",
@@ -71,8 +71,23 @@ async def test_optimal_path_success(
         },
     )
 
+    # optimal-path routes over the GLOBAL edge graph (every processed route in the
+    # DB), so its steps may legitimately traverse edges outside this route. We only
+    # assert it returns a usable path; per-route edge ownership is not guaranteed.
     assert response.status_code == 200
     data = response.json()
     assert data["algorithm"] == "astar"
     assert data["total_cost"] > 0
     assert len(data["steps"]) >= 1
+
+
+@pytest.mark.asyncio
+async def test_route_graph_invalid_uuid(client: AsyncClient) -> None:
+    response = await client.get("/api/v1/routes/not-a-uuid/graph")
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_route_graph_not_found_for_unknown_route(client: AsyncClient) -> None:
+    response = await client.get(f"/api/v1/routes/{uuid.uuid4()}/graph")
+    assert response.status_code == 404

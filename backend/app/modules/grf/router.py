@@ -2,16 +2,63 @@
 
 from __future__ import annotations
 
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.modules.grf import repository as grf_repo
-from app.modules.grf.schemas import OptimalPathRequest, OptimalPathResponse, PathStep
+from app.modules.grf.schemas import (
+    GraphEdge,
+    GraphNode,
+    OptimalPathRequest,
+    OptimalPathResponse,
+    PathStep,
+    RouteGraphResponse,
+)
 from app.modules.grf.service import build_node_pairs
 
 router = APIRouter()
 DB_DEPENDENCY = Depends(get_db)
+
+
+@router.get("/{route_id}/graph", response_model=RouteGraphResponse)
+async def get_route_graph(
+    route_id: str,
+    db: AsyncSession = DB_DEPENDENCY,
+) -> RouteGraphResponse:
+    """Return graph topology (nodes + edges) for a route. GRF-01, GRF-07, API-06
+
+    Lets a map UI pick start/end/waypoint nodes for /optimal-path and translate
+    the resulting steps back into segment geometries.
+    """
+    try:
+        route_uuid = uuid.UUID(route_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid route_id format. Must be a valid UUID.",
+        ) from None
+
+    await grf_repo.sync_edges_from_segments(db)
+    await grf_repo.create_topology(db)
+
+    edges = await grf_repo.get_route_edges(db, route_uuid)
+    if not edges:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Route '{route_id}' has no graph topology. Process it first.",
+        )
+
+    nodes = await grf_repo.get_route_nodes(db, route_uuid)
+    await db.commit()
+
+    return RouteGraphResponse(
+        route_id=route_uuid,
+        nodes=[GraphNode(**node) for node in nodes],
+        edges=[GraphEdge(**edge) for edge in edges],
+    )
 
 
 @router.post("/optimal-path", response_model=OptimalPathResponse)
