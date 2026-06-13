@@ -39,7 +39,7 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
-    command: npm run dev -- --host
+    command: sh -c "npm run build && npx vite preview --host --port 5173"
 
 volumes:
   pgdata:

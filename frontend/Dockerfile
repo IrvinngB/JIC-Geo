@@ -1,17 +1,13 @@
 FROM node:20-slim
 
-ENV PNPM_HOME="/pnpm"
-ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable
-
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml ./
+COPY package.json ./
 
-RUN pnpm install --frozen-lockfile
+RUN npm install
 
 COPY . .
 
 EXPOSE 5173
 
-CMD ["pnpm", "run", "dev", "--", "--host"]
+CMD ["npm", "run", "dev", "--", "--host"]

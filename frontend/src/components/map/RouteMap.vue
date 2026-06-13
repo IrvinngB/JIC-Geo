@@ -90,7 +90,6 @@ onMounted(() => {
     style: buildMapStyle(currentBaseMap.value),
   })
 
-  map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right')
   map.on('load', () => {
     applyTerrainMode()
     renderRouteLayer()
@@ -578,7 +577,7 @@ function buildPopupHTML(segment: RouteAnalysis['segments'][number]): string {
   <section class="relative h-full w-full bg-base-300">
     <div ref="mapContainer" class="h-full w-full"></div>
 
-    <div class="absolute right-4 top-16 z-10 w-64 rounded-box bg-base-100/95 p-3 shadow-xl backdrop-blur">
+    <div class="absolute right-4 top-4 z-10 w-64 rounded-box bg-base-100/95 p-3 shadow-xl backdrop-blur">
       <div class="mb-3 flex items-center justify-between gap-3">
         <div>
           <h3 class="text-sm font-bold">Mapa</h3>
@@ -645,32 +644,34 @@ function buildPopupHTML(segment: RouteAnalysis['segments'][number]): string {
 
     <div
       v-if="props.analysis"
-      class="absolute bottom-4 left-4 right-4 hidden max-h-64 overflow-y-auto rounded-box bg-base-100/95 p-3 shadow-xl backdrop-blur md:right-auto md:block md:w-96"
+      class="absolute bottom-4 left-4 right-4 hidden max-h-64 rounded-box bg-base-100/95 p-3 shadow-xl backdrop-blur md:right-auto md:block md:w-96"
     >
       <div class="mb-2 flex items-center justify-between">
         <h3 class="text-sm font-bold">Segmentos</h3>
         <span class="badge badge-ghost">{{ props.analysis.segments.length }}</span>
       </div>
-      <div class="space-y-2">
-        <button
-          v-for="segment in visibleSegments"
-          :key="segment.seq"
-          class="btn btn-ghost h-auto min-h-0 w-full justify-start p-2 text-left"
-          :class="segment.seq === props.selectedSeq ? 'bg-primary/10' : ''"
-          @click="emit('selectSegment', segment.seq)"
-        >
-          <div class="flex w-full items-center justify-between gap-3">
-            <div>
-              <p class="text-xs font-semibold">#{{ segment.seq }} · {{ segment.direction }}</p>
-              <p class="text-xs text-base-content/60">
-                {{ segment.velocity_kmh }} km/h · {{ segment.kcal }} kcal · S {{ segment.slope_pct }}
-              </p>
+      <div class="max-h-48 overflow-y-auto pr-2">
+        <div class="space-y-2">
+          <button
+            v-for="segment in visibleSegments"
+            :key="segment.seq"
+            class="btn btn-ghost h-auto min-h-0 w-full justify-start p-2 text-left"
+            :class="segment.seq === props.selectedSeq ? 'bg-primary/10' : ''"
+            @click="emit('selectSegment', segment.seq)"
+          >
+            <div class="flex w-full items-center justify-between gap-3">
+              <div>
+                <p class="text-xs font-semibold">#{{ segment.seq }} · {{ segment.direction }}</p>
+                <p class="text-xs text-base-content/60">
+                  {{ segment.velocity_kmh }} km/h · {{ segment.kcal }} kcal · S {{ segment.slope_pct }}
+                </p>
+              </div>
+              <span class="badge badge-sm" :class="riskBadgeClass(segment.risk_score)">
+                {{ segment.risk_score }}
+              </span>
             </div>
-            <span class="badge badge-sm" :class="riskBadgeClass(segment.risk_score)">
-              {{ segment.risk_score }}
-            </span>
-          </div>
-        </button>
+          </button>
+        </div>
       </div>
     </div>
 

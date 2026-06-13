@@ -21,3 +21,67 @@ html, body, #app {
   height: 100vh;
   overflow: hidden;
 }
+
+/* =========================================================
+   Custom scrollbar — matches sidebar bg-base-200 color
+   ========================================================= */
+
+/* Light mode (matches bg-base-200 = #f8fafc) */
+::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f8fafc;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #22c55e;
+  border-radius: 9999px;
+  min-height: 40px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4ade80;
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: #4ade80;
+}
+
+::-webkit-scrollbar-button {
+  display: none;
+  height: 0;
+  width: 0;
+}
+
+/* Firefox light mode */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #22c55e #f8fafc;
+}
+
+/* Dark mode (matches bg-base-200 = #111827) */
+html[data-theme="jic-dark"] ::-webkit-scrollbar-track {
+  background: #111827;
+  border-radius: 9999px;
+}
+
+html[data-theme="jic-dark"] ::-webkit-scrollbar-thumb {
+  background: #22c55e;
+  border-radius: 9999px;
+}
+
+html[data-theme="jic-dark"] ::-webkit-scrollbar-thumb:hover {
+  background: #4ade80;
+}
+
+html[data-theme="jic-dark"] ::-webkit-scrollbar-thumb:active {
+  background: #4ade80;
+}
+
+html[data-theme="jic-dark"] {
+  scrollbar-color: #22c55e #111827;
+}
