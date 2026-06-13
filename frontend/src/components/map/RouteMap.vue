@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import maplibregl, { type StyleSpecification } from 'maplibre-gl'
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson'
 import type { RouteAnalysis, RouteGraph } from '@/stores/routeStore'
 import AppIcon from '@/components/icons/AppIcon.vue'
+import SegmentPopup from '@/components/map/SegmentPopup.vue'
+import RiskWarningMarker from '@/components/map/RiskWarningMarker.vue'
 
 type BaseMapId = 'streets' | 'topo' | 'satellite'
 
@@ -67,6 +69,24 @@ const terrainEnabled = ref(false)
 let map: maplibregl.Map | null = null
 let hasFitRoute = false
 
+// Segment popup state (MAP-02)
+const popupVisible = ref(false)
+const popupX = ref(0)
+const popupY = ref(0)
+const popupSegment = ref<RouteAnalysis['segments'][number] | null>(null)
+
+function showPopupAt(segment: RouteAnalysis['segments'][number], x: number, y: number): void {
+  popupSegment.value = segment
+  popupX.value = x
+  popupY.value = y
+  popupVisible.value = true
+}
+
+function hidePopup(): void {
+  popupVisible.value = false
+  popupSegment.value = null
+}
+
 const currentBaseMap = computed(
   () => BASE_MAPS.find((baseMap) => baseMap.id === selectedBaseMap.value) ?? BASE_MAPS[0],
 )
@@ -90,6 +110,7 @@ onMounted(() => {
   })
 
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right')
+  provide('map', map)
   map.on('load', () => {
     applyTerrainMode()
     renderRouteLayer()
@@ -300,7 +321,14 @@ function renderRouteLayer(): void {
 
     map.on('click', 'route-segments-line', (event) => {
       const seq = event.features?.[0]?.properties?.seq
-      emit('selectSegment', typeof seq === 'number' ? seq : Number(seq))
+      const parsedSeq = typeof seq === 'number' ? seq : Number(seq)
+      emit('selectSegment', parsedSeq)
+
+      // MAP-02: show popup at click location
+      const segment = props.analysis?.segments.find((s) => s.seq === parsedSeq)
+      if (segment && event.point) {
+        showPopupAt(segment, event.point.x, event.point.y)
+      }
     })
   }
 
@@ -578,5 +606,19 @@ function riskBadgeClass(score: number): string {
         </button>
       </div>
     </div>
+
+    <SegmentPopup
+      v-if="popupVisible && popupSegment"
+      :segment="popupSegment"
+      :x="popupX"
+      :y="popupY"
+      @close="hidePopup"
+      @view-detail="hidePopup(); emit('selectSegment', popupSegment!.seq)"
+    />
+
+    <RiskWarningMarker
+      v-if="props.analysis"
+      :segments="props.analysis.segments"
+    />
   </section>
 </template>

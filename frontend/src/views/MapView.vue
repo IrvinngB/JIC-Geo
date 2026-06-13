@@ -5,6 +5,7 @@ import { storeToRefs } from 'pinia'
 import RouteMap from '@/components/map/RouteMap.vue'
 import HikerProfileForm from '@/components/sidebar/HikerProfileForm.vue'
 import RouteSummary from '@/components/sidebar/RouteSummary.vue'
+import MideIndicator from '@/components/sidebar/MideIndicator.vue'
 import FileUploader from '@/components/upload/FileUploader.vue'
 import ClimateSliders from '@/components/simulation/ClimateSliders.vue'
 import ClimateToggle from '@/components/simulation/ClimateToggle.vue'
@@ -187,6 +188,12 @@ async function applyScenario(scenario: SimulationScenario): Promise<void> {
         </div>
 
         <RouteSummary :analysis="analysis" />
+
+        <MideIndicator
+          v-if="analysis"
+          :dimensions="analysis.summary.mide_dimensions"
+          :global="analysis.summary.mide_global"
+        />
 
         <ClimateToggle
           v-if="analysis"
