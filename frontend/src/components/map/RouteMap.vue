@@ -1,11 +1,9 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import maplibregl, { type StyleSpecification } from 'maplibre-gl'
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson'
 import type { RouteAnalysis, RouteGraph } from '@/stores/routeStore'
 import AppIcon from '@/components/icons/AppIcon.vue'
-import SegmentPopup from '@/components/map/SegmentPopup.vue'
-import RiskWarningMarker from '@/components/map/RiskWarningMarker.vue'
 
 type BaseMapId = 'streets' | 'topo' | 'satellite'
 
@@ -68,24 +66,7 @@ const selectedBaseMap = ref<BaseMapId>('streets')
 const terrainEnabled = ref(false)
 let map: maplibregl.Map | null = null
 let hasFitRoute = false
-
-// Segment popup state (MAP-02)
-const popupVisible = ref(false)
-const popupX = ref(0)
-const popupY = ref(0)
-const popupSegment = ref<RouteAnalysis['segments'][number] | null>(null)
-
-function showPopupAt(segment: RouteAnalysis['segments'][number], x: number, y: number): void {
-  popupSegment.value = segment
-  popupX.value = x
-  popupY.value = y
-  popupVisible.value = true
-}
-
-function hidePopup(): void {
-  popupVisible.value = false
-  popupSegment.value = null
-}
+let activePopup: maplibregl.Popup | null = null
 
 const currentBaseMap = computed(
   () => BASE_MAPS.find((baseMap) => baseMap.id === selectedBaseMap.value) ?? BASE_MAPS[0],
@@ -110,11 +91,18 @@ onMounted(() => {
   })
 
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right')
-  provide('map', map)
   map.on('load', () => {
     applyTerrainMode()
     renderRouteLayer()
     renderRoutingLayers()
+  })
+
+  // Click on empty map closes any open popup
+  map.on('click', (event) => {
+    if (!event.defaultPrevented) {
+      activePopup?.remove()
+      activePopup = null
+    }
   })
 })
 
@@ -256,6 +244,22 @@ function buildFeatureCollection(): FeatureCollection<LineString> {
   }
 }
 
+function buildTopRiskFeatureCollection(): FeatureCollection<Point> {
+  const features: Array<Feature<Point>> =
+    props.analysis?.segments
+      .filter((segment) => segment.is_top_risk && segment.geom)
+      .map((segment) => {
+        const coords = segment.geom!.coordinates
+        const mid = coords[Math.floor(coords.length / 2)]
+        return {
+          type: 'Feature',
+          properties: { seq: segment.seq },
+          geometry: { type: 'Point', coordinates: [mid[0], mid[1]] },
+        }
+      }) ?? []
+  return { type: 'FeatureCollection', features }
+}
+
 function renderRouteLayer(): void {
   // isStyleLoaded() guards what we actually need (style present to add
   // layers), without waiting for raster tiles like loaded() does. After a
@@ -324,12 +328,44 @@ function renderRouteLayer(): void {
       const parsedSeq = typeof seq === 'number' ? seq : Number(seq)
       emit('selectSegment', parsedSeq)
 
-      // MAP-02: show popup at click location
+      // MAP-02: show MapLibre popup at segment centroid
       const segment = props.analysis?.segments.find((s) => s.seq === parsedSeq)
-      if (segment && event.point) {
-        showPopupAt(segment, event.point.x, event.point.y)
+      if (segment?.geom) {
+        activePopup?.remove()
+        const coords = segment.geom.coordinates
+        const mid = coords[Math.floor(coords.length / 2)]
+        const html = buildPopupHTML(segment)
+        activePopup = new maplibregl.Popup({ closeButton: false, offset: 12, className: 'segment-popup' })
+          .setLngLat([mid[0], mid[1]])
+          .setHTML(html)
+          .addTo(map!)
       }
     })
+
+    // Add risk warning symbols (MAP-09) — top 10% segments
+    const topRiskFeatures = buildTopRiskFeatureCollection()
+    const topRiskSource = map.getSource('risk-warnings') as maplibregl.GeoJSONSource | undefined
+    if (topRiskSource) {
+      topRiskSource.setData(topRiskFeatures)
+    } else {
+      map.addSource('risk-warnings', { type: 'geojson', data: topRiskFeatures })
+      map.addLayer({
+        id: 'risk-warnings-symbols',
+        type: 'symbol',
+        source: 'risk-warnings',
+        layout: {
+          'text-field': '⚠',
+          'text-size': 16,
+          'text-anchor': 'center',
+          'text-offset': [0, -0.8],
+        },
+        paint: {
+          'text-color': '#ef4444',
+          'text-halo-color': '#ffffff',
+          'text-halo-width': 2,
+        },
+      })
+    }
   }
 
   if (!hasFitRoute) {
@@ -505,6 +541,37 @@ function riskBadgeClass(score: number): string {
   if (score >= 45) return 'badge-warning'
   return 'badge-success'
 }
+
+function buildPopupHTML(segment: RouteAnalysis['segments'][number]): string {
+  const dir = segment.direction === 'ascent' ? 'Subida' : segment.direction === 'descent' ? 'Bajada' : 'Plano'
+  const badgeColor = segment.risk_score >= 75 ? '#ef4444' : segment.risk_score >= 45 ? '#f59e0b' : '#22c55e'
+  const badgeBg = segment.risk_score >= 75 ? 'rgba(239,68,68,0.15)' : segment.risk_score >= 45 ? 'rgba(245,158,11,0.15)' : 'rgba(34,197,94,0.15)'
+  const topRisk = segment.is_top_risk ? '<div style="color: #ef4444; font-size: 11px; font-weight: 600; margin-top: 6px;">⚠ Top 10% de riesgo</div>' : ''
+  const ecc = segment.is_eccentric_fatigue ? '<div style="color: #ef4444; font-size: 10px; margin-top: 4px;">Bajada fatigante</div>' : ''
+  return `
+    <div style="font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px; min-width: 200px; color: #e2e8f0;">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px;">
+        <strong style="font-size: 14px; color: #f1f5f9;">Tramo #${segment.seq}</strong>
+        <span style="font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; color: ${badgeColor}; background: ${badgeBg};">${segment.risk_score}/100</span>
+      </div>
+      <div style="font-size: 12px; color: #94a3b8; line-height: 1.5;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+          <span>${dir}</span>
+          <span style="font-weight: 500; color: #cbd5e1;">${segment.slope_pct}%</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+          <span>Velocidad</span>
+          <span style="font-weight: 500; color: #cbd5e1;">${segment.velocity_kmh} km/h</span>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span>CoT</span>
+          <span style="font-weight: 500; color: #cbd5e1;">${segment.cot_j_per_kg_m} J/kg·m</span>
+        </div>
+      </div>
+      ${topRisk}${ecc}
+    </div>
+  `
+}
 </script>
 
 <template>
@@ -607,18 +674,19 @@ function riskBadgeClass(score: number): string {
       </div>
     </div>
 
-    <SegmentPopup
-      v-if="popupVisible && popupSegment"
-      :segment="popupSegment"
-      :x="popupX"
-      :y="popupY"
-      @close="hidePopup"
-      @view-detail="hidePopup(); emit('selectSegment', popupSegment!.seq)"
-    />
-
-    <RiskWarningMarker
-      v-if="props.analysis"
-      :segments="props.analysis.segments"
-    />
   </section>
 </template>
+
+<style scoped>
+/* Dark themed popup styling */
+:deep(.maplibregl-popup-content) {
+  background: #1e293b !important;
+  border: 1px solid #334155 !important;
+  border-radius: 12px !important;
+  padding: 12px !important;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.4) !important;
+}
+:deep(.maplibregl-popup-tip) {
+  border-top-color: #1e293b !important;
+}
+</style>

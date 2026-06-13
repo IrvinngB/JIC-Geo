@@ -65,9 +65,9 @@ function formatNumber(value: number, digits = 1): string {
             {{ props.analysis.route_name ?? 'Ruta sin nombre' }} · {{ props.analysis.source_format }}
           </p>
         </div>
-        <div v-if="props.analysis" class="text-right">
-          <div class="badge badge-primary badge-outline">MIDE {{ props.analysis.summary.mide_global }}</div>
-          <p class="mt-1 text-xs font-semibold text-base-content/70">{{ effortLabel }}</p>
+        <div v-if="props.analysis" class="flex flex-col items-end gap-1 min-w-[80px]">
+          <div class="badge badge-primary badge-outline whitespace-nowrap">MIDE {{ props.analysis.summary.mide_global }}</div>
+          <p class="text-xs font-semibold text-base-content/70">{{ effortLabel }}</p>
         </div>
       </div>
 
