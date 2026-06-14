@@ -422,7 +422,7 @@ async def _analyze_route(
             weight_kg=profile.weight_kg,
             load_kg=profile.load_kg,
             velocity_ms=velocity_ms,
-            slope_pct=slope,
+            slope_pct=slope * 100,  # Pandolf expects grade in percent, not decimal ratio
             terrain_eta=eta,
         )
 
