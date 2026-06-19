@@ -25,6 +25,9 @@ data/samples/*.gpx
 .DS_Store
 Thumbs.db
 
+# Word temp files
+~$*.docx
+
 # IDE
 .idea/
 .vscode/
