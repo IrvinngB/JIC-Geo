@@ -8,11 +8,15 @@ from pathlib import Path
 import httpx
 
 BASE = "http://127.0.0.1:8000/api/v1"
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent
+if (BASE_DIR.parent / "data").exists():
+    DATA_DIR = BASE_DIR.parent / "data"
+else:
+    DATA_DIR = BASE_DIR / "data"
 
 GPX_FILES = [
-    ("Volcan Baru", str(BASE_DIR / "data" / "samples" / "volcan-baru-chiriqui-panama.gpx")),
-    ("Camino de Cruces", str(BASE_DIR / "data" / "samples" / "sendero-camino-real-de-cruces-gamboa-venta-de-cruces-av-madd (1).gpx")),
+    ("Volcan Baru", str(DATA_DIR / "samples" / "volcan-baru-chiriqui-panama.gpx")),
+    ("Camino de Cruces", str(DATA_DIR / "samples" / "sendero-camino-real-de-cruces-gamboa-venta-de-cruces-av-madd (1).gpx")),
 ]
 MODELS = ["tobler", "irmischer_clarke"]
 
