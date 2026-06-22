@@ -20,4 +20,4 @@ class SimulationRequest(BaseModel):
     climate: ClimateOverride | None = None
     compare_with_real: bool = False
     profile: HikerProfile = Field(default_factory=HikerProfile)
-    velocity_model: VelocityModel = VelocityModel.TOBLER
+    velocity_model: VelocityModel = VelocityModel.IRMISCHER_CLARKE

@@ -99,7 +99,7 @@ class BiomechanicalRequest(BaseModel):
     """Input for biomechanical analysis."""
 
     profile: HikerProfile = Field(default_factory=HikerProfile)
-    velocity_model: VelocityModel = VelocityModel.TOBLER
+    velocity_model: VelocityModel = VelocityModel.IRMISCHER_CLARKE
     segment_length_m: float = Field(default=settings.segment_length_m, gt=0)
     climate: ClimateOverride | None = None
 
@@ -202,7 +202,7 @@ async def analyze_route(
     weight_kg: float = Form(default=70.0, gt=0),
     load_kg: float = Form(default=10.0, ge=0),
     fitness_level: FitnessLevel = Form(default=FitnessLevel.MEDIUM),
-    velocity_model: VelocityModel = Form(default=VelocityModel.TOBLER),
+    velocity_model: VelocityModel = Form(default=VelocityModel.IRMISCHER_CLARKE),
     segment_length_m: float = Form(default=settings.segment_length_m, gt=0),
     savgol_window: int = Form(default=5, gt=0),
     db: AsyncSession = DB_DEPENDENCY,

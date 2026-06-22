@@ -9,6 +9,7 @@ from app.modules.vel.service import (
     apply_langmuir,
     calculate_velocity,
     tobler,
+    irmischer_clarke,
 )
 
 
@@ -31,6 +32,28 @@ class TestTobler:
     def test_steep_ascent_reduces_velocity(self):
         v_flat = tobler(0.0)
         v_steep = tobler(0.5)
+        assert v_steep < v_flat
+
+
+class TestIrmischerClarke:
+    def test_flat_terrain_is_approx_3_9_kmh(self):
+        v = irmischer_clarke(slope=0.0)
+        assert abs(v - 3.89) < 0.05
+
+    def test_optimal_slope_is_4kmh(self):
+        """Maximum velocity at S ≈ -0.0506."""
+        v = irmischer_clarke(slope=-0.0506)
+        assert abs(v - 4.0) < 0.01
+
+    def test_off_path_factor(self):
+        """Off-path velocity must be 60% of on-path."""
+        on = irmischer_clarke(slope=0.0, is_on_path=True)
+        off = irmischer_clarke(slope=0.0, is_on_path=False)
+        assert abs(off - on * 0.6) < 0.01
+
+    def test_steep_ascent_reduces_velocity(self):
+        v_flat = irmischer_clarke(0.0)
+        v_steep = irmischer_clarke(0.5)
         assert v_steep < v_flat
 
 

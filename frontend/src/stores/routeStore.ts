@@ -378,7 +378,7 @@ export const useRouteStore = defineStore("route", () => {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profile, velocity_model: "tobler" }),
+        body: JSON.stringify({ profile, velocity_model: "irmischer_clarke" }),
       },
     );
 
