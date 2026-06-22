@@ -17,7 +17,7 @@ from app.config import settings
 from app.db.session import get_db
 from app.modules.cli import repository as cli_repo
 from app.modules.cli.schemas import ClimateData, ClimateOverride
-from app.modules.cli.service import cardiovascular_drift_multiplier, climate_from_override
+from app.modules.cli.service import cardiovascular_drift_multiplier, climate_from_override, velocity_rain_factor
 from app.modules.dat import repository as dat_repo
 from app.modules.dat import service as dat_service
 from app.modules.met import repository as met_repo
@@ -390,6 +390,8 @@ async def _analyze_route(
             is_on_path=is_on_path,
             apply_langmuir_correction=True,
         )
+        # Rain degrades velocity on soft surfaces (CLI-09)
+        velocity_kmh *= velocity_rain_factor(climate.precip_mm, surface_type)
         velocity_kmh *= v_factor
         baseline_velocity_kmh = calculate_velocity(
             slope=slope,

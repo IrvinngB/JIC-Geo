@@ -124,6 +124,35 @@ def climate_cost_multiplier(
     return round(min(multiplier, cap), 4)
 
 
+SOFT_SURFACES = {"mud", "sand", "scrub", "dense_scrub", "sand_mud"}
+
+
+def velocity_rain_factor(
+    precip_mm: float,
+    surface_type: str,
+    min_factor: float = 0.5,
+) -> float:
+    """Return a velocity multiplier for rain conditions. CLI-09
+
+    Curve: max(min_factor, 1.0 - 0.005 * precip_mm)
+    Soft surfaces (mud, sand, scrub) amplify the degradation by 1.5x.
+
+    Examples:
+        precip=0  → 1.0 (no effect)
+        precip=10 → 0.95 (dirt) / 0.925 (mud)
+        precip=35 → 0.825 (dirt) / 0.738 (mud)
+        precip=80 → 0.60 (dirt) / 0.50 (mud, hits floor)
+    """
+    if precip_mm <= 0.0:
+        return 1.0
+
+    degradation = 0.005 * precip_mm  # 5 mm → 2.5%, 35 mm → 17.5%
+    if surface_type in SOFT_SURFACES:
+        degradation *= 1.5  # amplify on soft ground
+
+    return max(min_factor, round(1.0 - degradation, 4))
+
+
 def cardiovascular_drift_multiplier(
     elapsed_time_min: float,
     wbgt: float,
