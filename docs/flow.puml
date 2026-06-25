@@ -1,0 +1,46 @@
+@startuml flow
+
+title RiskTrail — Flujo de análisis de ruta
+
+participant "FastAPI\n/api/v1/routes" as API
+participant "RUT\n(segmentación)" as RUT
+participant "VEL\n(velocidad)" as VEL
+participant "MET\n(metabolismo)" as MET
+participant "CLI\n(clima)" as CLI
+participant "Open-Meteo" as OM
+participant "RIE\n(riesgo)" as RIE
+database "PostgreSQL\nPostGIS + pgRouting" as DB
+
+[-> API : POST /routes/upload (GPX/GeoJSON, profile)
+
+API -> RUT : segmentar ruta (50m)
+RUT -> DB : extraer DEM / persistir Segment
+RUT --> API : segmentos + pendiente (%)
+
+API -> VEL : calcular velocidad por segmento
+VEL -> VEL : Tobler / Irmischer-Clarke\n+ corrección off-path\n+ Langmuir (descensos)
+VEL --> API : velocidad por segmento
+
+API -> MET : calcular costo metabólico
+MET -> MET : Minetti (CoT)\n+ Pandolf (tasa metabólica)
+MET --> API : gasto energético por segmento
+
+alt clima real
+    API -> CLI : análisis con clima real
+    CLI -> OM : consultar temperatura, humedad, UV
+    OM --> CLI : datos climáticos
+else clima simulado
+    API -> CLI : análisis con clima simulado (/simulate)
+    CLI -> CLI : generar condiciones sintéticas
+end
+CLI -> CLI : calcular WBGT\n+ estrés cardiovascular
+CLI --> API : costo climático por segmento
+
+API -> RIE : agregar riesgo por segmento
+RIE -> RIE : ponderación AHP\n(metabólico, velocidad, clima, terreno)\n+ correcciones Cifuentes
+RIE --> API : índice de riesgo
+
+API -> DB : persistir índice de riesgo
+API -->] : BiomechanicalResponse\n(resumen + segmentos)
+
+@enduml

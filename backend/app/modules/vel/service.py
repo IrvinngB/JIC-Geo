@@ -72,7 +72,7 @@ def _slope_pct_to_deg(slope_pct: float) -> float:
 
 def calculate_velocity(
     slope: float,
-    model: VelocityModel = VelocityModel.TOBLER,
+    model: VelocityModel = VelocityModel.IRMISCHER_CLARKE,
     is_on_path: bool = True,
     apply_langmuir_correction: bool = True,
 ) -> float:

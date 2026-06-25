@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import RouteMap from '@/components/map/RouteMap.vue'
@@ -58,6 +58,33 @@ async function toggleRouting(): Promise<void> {
 // On mobile the side panel becomes a bottom sheet. This drives its open state;
 // on desktop (md+) it is ignored because the panel is a static sidebar.
 const sheetOpen = ref(false)
+
+// Desktop-only sidebar resize (drag the right edge). Ignored on mobile, where
+// the panel is a bottom sheet instead.
+const SIDEBAR_MIN_WIDTH = 320
+const SIDEBAR_MAX_WIDTH = 640
+const sidebarWidth = ref(384)
+let isResizingSidebar = false
+
+function startSidebarResize(event: MouseEvent): void {
+  isResizingSidebar = true
+  event.preventDefault()
+  window.addEventListener('mousemove', onSidebarResize)
+  window.addEventListener('mouseup', stopSidebarResize)
+}
+
+function onSidebarResize(event: MouseEvent): void {
+  if (!isResizingSidebar) return
+  sidebarWidth.value = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, event.clientX))
+}
+
+function stopSidebarResize(): void {
+  isResizingSidebar = false
+  window.removeEventListener('mousemove', onSidebarResize)
+  window.removeEventListener('mouseup', stopSidebarResize)
+}
+
+onUnmounted(stopSidebarResize)
 const simulationMode = computed({
   get: () => simulation.isSimulationMode.value,
   set: (value: boolean) => {
@@ -131,9 +158,15 @@ async function applyScenario(scenario: SimulationScenario): Promise<void> {
 <template>
   <div class="relative flex h-screen w-screen flex-col overflow-hidden bg-base-300 text-base-content md:flex-row">
     <aside
-      class="fixed inset-x-0 bottom-0 z-30 flex h-[85vh] flex-col rounded-t-2xl bg-base-200 shadow-2xl transition-transform duration-300 ease-out md:static md:z-auto md:h-auto md:w-96 md:shrink-0 md:translate-y-0 md:rounded-none md:border-r md:border-base-100 md:shadow-none"
+      class="fixed inset-x-0 bottom-0 z-30 flex h-[85vh] flex-col rounded-t-2xl bg-base-200 shadow-2xl transition-transform duration-300 ease-out md:relative md:z-auto md:h-auto md:w-[var(--sidebar-width)] md:shrink-0 md:translate-y-0 md:rounded-none md:border-r md:border-base-100 md:shadow-none"
       :class="sheetOpen ? 'translate-y-0' : 'translate-y-[calc(85vh_-_3.5rem)] md:translate-y-0'"
+      :style="{ '--sidebar-width': `${sidebarWidth}px` }"
     >
+      <div
+        class="absolute inset-y-0 right-0 z-10 hidden w-1.5 cursor-col-resize touch-none select-none hover:bg-primary/40 active:bg-primary/60 md:block"
+        title="Arrastrar para cambiar el ancho del panel"
+        @mousedown="startSidebarResize"
+      ></div>
       <button
         type="button"
         class="flex shrink-0 flex-col items-center gap-1 px-4 pb-2 pt-3 md:hidden"

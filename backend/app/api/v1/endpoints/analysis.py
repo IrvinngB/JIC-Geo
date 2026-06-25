@@ -17,7 +17,7 @@ from app.config import settings
 from app.db.session import get_db
 from app.modules.cli import repository as cli_repo
 from app.modules.cli.schemas import ClimateData, ClimateOverride
-from app.modules.cli.service import cardiovascular_drift_multiplier, climate_from_override
+from app.modules.cli.service import cardiovascular_drift_multiplier, climate_from_override, velocity_rain_factor
 from app.modules.dat import repository as dat_repo
 from app.modules.dat import service as dat_service
 from app.modules.met import repository as met_repo
@@ -99,7 +99,7 @@ class BiomechanicalRequest(BaseModel):
     """Input for biomechanical analysis."""
 
     profile: HikerProfile = Field(default_factory=HikerProfile)
-    velocity_model: VelocityModel = VelocityModel.TOBLER
+    velocity_model: VelocityModel = VelocityModel.IRMISCHER_CLARKE
     segment_length_m: float = Field(default=settings.segment_length_m, gt=0)
     climate: ClimateOverride | None = None
 
@@ -202,7 +202,7 @@ async def analyze_route(
     weight_kg: float = Form(default=70.0, gt=0),
     load_kg: float = Form(default=10.0, ge=0),
     fitness_level: FitnessLevel = Form(default=FitnessLevel.MEDIUM),
-    velocity_model: VelocityModel = Form(default=VelocityModel.TOBLER),
+    velocity_model: VelocityModel = Form(default=VelocityModel.IRMISCHER_CLARKE),
     segment_length_m: float = Form(default=settings.segment_length_m, gt=0),
     savgol_window: int = Form(default=5, gt=0),
     db: AsyncSession = DB_DEPENDENCY,
@@ -390,6 +390,8 @@ async def _analyze_route(
             is_on_path=is_on_path,
             apply_langmuir_correction=True,
         )
+        # Rain degrades velocity on soft surfaces (CLI-09)
+        velocity_kmh *= velocity_rain_factor(climate.precip_mm, surface_type)
         velocity_kmh *= v_factor
         baseline_velocity_kmh = calculate_velocity(
             slope=slope,
@@ -422,7 +424,7 @@ async def _analyze_route(
             weight_kg=profile.weight_kg,
             load_kg=profile.load_kg,
             velocity_ms=velocity_ms,
-            slope_pct=slope,
+            slope_pct=slope * 100,  # Pandolf expects grade in percent, not decimal ratio
             terrain_eta=eta,
         )
 
