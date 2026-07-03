@@ -28,16 +28,18 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: sh -c "uv run alembic upgrade head && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
   frontend:
     build: ./frontend
     ports:
       - "5173:5173"
+    environment:
+      VITE_API_PROXY_TARGET: http://backend:8000
     volumes:
       - ./frontend:/app
       - /app/node_modules
-    command: npm run dev -- --host
+    command: sh -c "npm run build && npx vite preview --host --port 5173"
 
 volumes:
   pgdata:

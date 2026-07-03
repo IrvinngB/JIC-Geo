@@ -4,14 +4,7 @@
  */
 
 import { reactive, ref } from 'vue'
-import { useRouteStore } from '@/stores/routeStore'
-
-export interface ClimateOverride {
-  temperature_c: number
-  humidity_pct: number
-  precip_mm: number
-  uv_index: number
-}
+import { useRouteStore, type ClimateOverride } from '@/stores/routeStore'
 
 export type SimulationScenario = 'dry' | 'light_rain' | 'heavy_rain' | 'extreme_heat' | 'night'
 
@@ -49,8 +42,7 @@ export function useSimulation() {
   async function switchToRealData(): Promise<void> {
     isSimulationMode.value = false
     activeScenario.value = null
-    // Re-analyze with real climate (pass no climate override)
-    // Implementation depends on Phase 7 API
+    await store.refreshRealClimate()
   }
 
   return {

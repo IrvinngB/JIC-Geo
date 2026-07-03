@@ -1,8 +1,8 @@
-# JIC-Geo — Plan de Implementación por Fases
+# RiskTrail — Plan de Implementación por Fases
 
 > **Stack:** FastAPI (Python) · Vue 3 · PostgreSQL + PostGIS + pgRouting · Docker  
 > **Objetivo:** Índice Dinámico de Riesgo para senderismo — API REST + mapa interactivo  
-> **Documentos base:** [Requerimientos.md](file:///Users/Irvinng/Developer/Proyectos/JIC-Geo/Requerimientos.md) · [Formulas.md](file:///Users/Irvinng/Developer/Proyectos/JIC-Geo/Formulas.md) · [mitigacion.md](file:///Users/Irvinng/Developer/Proyectos/JIC-Geo/mitigacion.md)
+> **Documentos base:** [Requerimientos.md](file:///Users/Irvinng/Developer/Proyectos/RiskTrail/Requerimientos.md) · [Formulas.md](file:///Users/Irvinng/Developer/Proyectos/RiskTrail/Formulas.md) · [mitigacion.md](file:///Users/Irvinng/Developer/Proyectos/RiskTrail/mitigacion.md)
 
 ---
 
@@ -31,7 +31,7 @@ Cada fase ataca un nodo (o grupo de nodos) de esta cadena. Ninguna fase depende 
 ## Estructura del Monorepo
 
 ```
-JIC-Geo/
+RiskTrail/
 ├── docker-compose.yml
 ├── .env.example
 ├── docs/                        # Documentación existente
@@ -515,7 +515,7 @@ SELECT pgr_createTopology('edges', 0.00001, 'geom');
 
 ### Función `climate_cost_multiplier`
 
-Implementación directa del SQL definido en [mitigacion.md](file:///Users/Irvinng/Developer/Proyectos/JIC-Geo/mitigacion.md) sección Problema 3 — la función PostgreSQL con `IMMUTABLE PARALLEL SAFE` y cap de 3×.
+Implementación directa del SQL definido en [mitigacion.md](file:///Users/Irvinng/Developer/Proyectos/RiskTrail/mitigacion.md) sección Problema 3 — la función PostgreSQL con `IMMUTABLE PARALLEL SAFE` y cap de 3×.
 
 ### Verificación
 - `SELECT pgr_version();` confirma pgRouting activo

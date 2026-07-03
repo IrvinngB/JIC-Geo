@@ -80,6 +80,15 @@ async def save_route(
     return result.scalar_one()
 
 
+async def list_dem_sources(db: AsyncSession) -> list[DEMSource]:
+    """Fetch all registered DEM sources ordered by priority (highest first)."""
+    from sqlalchemy import select
+    result = await db.execute(
+        select(DEMSource).order_by(DEMSource.priority.desc())
+    )
+    return list(result.scalars().all())
+
+
 async def get_route(db: AsyncSession, route_id: uuid.UUID) -> Route | None:
     """Fetch a Route with its segments by primary key."""
     result = await db.execute(

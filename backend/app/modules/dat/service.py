@@ -69,6 +69,13 @@ async def parse_upload(file: UploadFile) -> dict[str, Any]:
     )
 
 
+def _raise_422(detail: str) -> None:
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail=detail,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Public entry points — DEM (DAT-04)
 # ---------------------------------------------------------------------------
@@ -119,7 +126,7 @@ def _parse_gpx(raw: bytes) -> dict[str, Any]:
         gpx = gpxpy.parse(io.BytesIO(raw))
     except Exception as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"Invalid GPX file: {exc}",
         ) from exc
 
@@ -136,7 +143,7 @@ def _parse_gpx(raw: bytes) -> dict[str, Any]:
 
     if len(coords) < 2:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="GPX file must contain at least 2 track points.",
         )
 
@@ -153,7 +160,7 @@ def _parse_geojson(raw: bytes) -> dict[str, Any]:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"Invalid JSON: {exc}",
         ) from exc
 
@@ -183,7 +190,7 @@ def _parse_geojson(raw: bytes) -> dict[str, Any]:
 
     if len(coords) < 2:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="GeoJSON must contain a LineString or MultiLineString with at least 2 points.",
         )
 

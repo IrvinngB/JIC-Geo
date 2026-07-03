@@ -22,6 +22,7 @@ class SegmentOut(BaseModel):
     slope_pct: float | None
     surface_type: str
     canopy_density: float
+    elevation_interpolated: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -35,6 +36,20 @@ class RouteUploadResponse(BaseModel):
     segment_count: int
     total_length_m: Annotated[float, Field(description="Sum of all segment lengths in metres")]
     segments: list[SegmentOut]
+
+
+class RouteOut(BaseModel):
+    """Full route representation with its segments."""
+
+    id: uuid.UUID
+    name: str | None
+    source_format: str
+    uploaded_at: str
+    segment_count: int
+    total_length_m: float
+    segments: list[SegmentOut]
+
+    model_config = {"from_attributes": True}
 
 
 # ---------------------------------------------------------------------------
