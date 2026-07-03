@@ -11,7 +11,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.modules.dat import repository as dat_repo
 from app.modules.dat import service as dat_service
-from app.modules.dat.schemas import DEMSourceOut, DEMUploadResponse, RouteOut, RouteUploadResponse, SegmentOut
+from app.modules.dat.schemas import (
+    DEMSourceOut,
+    DEMUploadResponse,
+    RouteOut,
+    RouteUploadResponse,
+    SegmentOut,
+    SegmentSurfacePatch,
+    SegmentSurfacePatchResponse,
+)
 from app.db.models import Route
 
 # ---------------------------------------------------------------------------
@@ -129,6 +137,64 @@ async def get_route_segments(
         SegmentOut.model_validate(seg)
         for seg in sorted(route.segments, key=lambda s: s.seq)
     ]
+
+
+@router.patch("/{route_id}/segments", response_model=SegmentSurfacePatchResponse)
+async def update_route_segments(
+    route_id: str,
+    payload: SegmentSurfacePatch,
+    db: AsyncSession = Depends(get_db),
+) -> SegmentSurfacePatchResponse:
+    """
+    Override terrain attributes for a range of segments (DAT-07, DAT-08).
+
+    - Updates surface_type and/or canopy_density for segments whose seq falls
+      within [seq_from, seq_to]; omit both bounds to update the whole route.
+    - Surface type feeds the Pandolf terrain coefficient, the rain velocity
+      degradation, and the Cifuentes risk factors — callers should re-run the
+      biomechanical analysis afterwards to refresh derived values.
+    """
+    from uuid import UUID
+    try:
+        route_uuid = UUID(route_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid route_id format. Must be a valid UUID.",
+        )
+
+    route = await dat_repo.get_route(db, route_uuid)
+    if route is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Route '{route_id}' not found.",
+        )
+
+    updated_count = await dat_repo.update_segments_surface(
+        db,
+        route_id=route_uuid,
+        surface_type=payload.surface_type,
+        canopy_density=payload.canopy_density,
+        seq_from=payload.seq_from,
+        seq_to=payload.seq_to,
+    )
+    if updated_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No segments matched the given seq range.",
+        )
+
+    route = await dat_repo.get_route(db, route_uuid)
+    assert route is not None  # existence checked above; same transaction
+
+    return SegmentSurfacePatchResponse(
+        route_id=route.id,
+        updated_count=updated_count,
+        segments=[
+            SegmentOut.model_validate(seg)
+            for seg in sorted(route.segments, key=lambda s: s.seq)
+        ],
+    )
 
 
 # ---------------------------------------------------------------------------

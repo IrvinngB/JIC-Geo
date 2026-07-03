@@ -5,12 +5,13 @@ from __future__ import annotations
 import math
 from datetime import datetime, timezone
 
-from app.modules.cli.schemas import ClimateData, ClimateOverride
+from app.modules.cli.schemas import ClimateData, ClimateOverride, ClimateTimeline
 
 WBGT_CRITICAL_C = 28.0
 PRECIP_FRICTION_MM = 5.0
 DESCENT_FRICTION_SLOPE = -0.1763  # tan(-10 degrees)
 LOW_CANOPY_THRESHOLD = 0.2
+LAPSE_RATE_C_PER_M = 0.0065  # standard atmosphere: -6.5 degC per km of ascent
 
 
 def grid_zone_id(lat: float, lon: float, precision: int = 2) -> str:
@@ -82,6 +83,106 @@ def normalize_open_meteo_payload(payload: dict, lat: float, lon: float) -> Clima
         source="api",
         timestamp=timestamp,
         zone_id=grid_zone_id(lat, lon),
+    )
+
+
+def normalize_open_meteo_forecast(
+    payload: dict,
+    lat: float,
+    lon: float,
+    start: datetime,
+) -> ClimateTimeline:
+    """Convert an Open-Meteo hourly forecast into a ClimateTimeline. CLI-10.
+
+    Keeps only hours at or after `start` (floored to the hour) so that index N
+    in the timeline is the climate N hours into the hike.
+    """
+    hourly = payload.get("hourly") or {}
+    times = hourly.get("time") or []
+    temperatures = hourly.get("temperature_2m") or []
+    humidities = hourly.get("relative_humidity_2m") or []
+    precips = hourly.get("precipitation") or []
+    uv_indexes = hourly.get("uv_index") or []
+    radiations = hourly.get("shortwave_radiation") or []
+
+    floor_start = start.astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0)
+    zone_id = grid_zone_id(lat, lon)
+
+    hours: list[ClimateData] = []
+    for i, time_raw in enumerate(times):
+        hour_ts = datetime.fromisoformat(str(time_raw)).replace(tzinfo=timezone.utc)
+        if hour_ts < floor_start:
+            continue
+        temperature = float(temperatures[i])
+        humidity = float(humidities[i])
+        uv_index = max(0.0, float(uv_indexes[i] if uv_indexes[i] is not None else 0.0))
+        radiation = float(radiations[i]) if i < len(radiations) and radiations[i] is not None else None
+        hours.append(
+            ClimateData(
+                temperature_c=temperature,
+                humidity_pct=humidity,
+                precip_mm=max(0.0, float(precips[i])),
+                uv_index=uv_index,
+                wbgt=round(calculate_wbgt(temperature, humidity, uv_index, radiation), 2),
+                source="forecast",
+                timestamp=hour_ts,
+                zone_id=zone_id,
+                shortwave_radiation_w_m2=radiation,
+            )
+        )
+
+    if not hours:
+        raise ValueError("Forecast payload has no hours at or after the hike start")
+
+    elevation = payload.get("elevation")
+    return ClimateTimeline(
+        start=floor_start,
+        hours=hours,
+        reference_elevation_m=float(elevation) if elevation is not None else None,
+    )
+
+
+def constant_timeline(climate: ClimateData, start: datetime) -> ClimateTimeline:
+    """Wrap a single climate observation as a timeline (override/fallback paths).
+
+    No reference elevation: constant climates represent user-fixed or unknown
+    conditions, so no lapse-rate adjustment is applied.
+    """
+    return ClimateTimeline(start=start, hours=[climate], reference_elevation_m=None)
+
+
+def climate_at(
+    timeline: ClimateTimeline,
+    elapsed_min: float,
+    elevation_m: float | None = None,
+) -> ClimateData:
+    """Return the climate for a segment reached `elapsed_min` into the hike. CLI-10.
+
+    Picks the forecast hour by elapsed time (clamped to the last available hour)
+    and, when both elevations are known, corrects temperature by the standard
+    lapse rate and recomputes WBGT accordingly.
+    """
+    index = min(int(max(0.0, elapsed_min) // 60), len(timeline.hours) - 1)
+    base = timeline.hours[index]
+
+    if elevation_m is None or timeline.reference_elevation_m is None:
+        return base
+
+    delta_m = elevation_m - timeline.reference_elevation_m
+    temperature = base.temperature_c - LAPSE_RATE_C_PER_M * delta_m
+    return base.model_copy(
+        update={
+            "temperature_c": round(temperature, 2),
+            "wbgt": round(
+                calculate_wbgt(
+                    temperature,
+                    base.humidity_pct,
+                    base.uv_index,
+                    base.shortwave_radiation_w_m2,
+                ),
+                2,
+            ),
+        }
     )
 
 

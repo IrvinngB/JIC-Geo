@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -21,3 +22,7 @@ class SimulationRequest(BaseModel):
     compare_with_real: bool = False
     profile: HikerProfile = Field(default_factory=HikerProfile)
     velocity_model: VelocityModel = VelocityModel.IRMISCHER_CLARKE
+    start_datetime: datetime | None = Field(
+        default=None,
+        description="Hike start (UTC); keeps the real-climate baseline aligned with the analysis (CLI-10).",
+    )

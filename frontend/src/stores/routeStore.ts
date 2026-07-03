@@ -27,7 +27,7 @@ export interface RouteSummary {
   ccr: number;
   mide_global: number;
   mide_dimensions: MideDimensions;
-  climate_source: "pending" | "api" | "simulation";
+  climate_source: "pending" | "api" | "simulation" | "forecast";
   climate_timestamp: string | null;
 }
 
@@ -54,6 +54,7 @@ export interface Segment {
   metabolic_rate_w: number;
   is_eccentric_fatigue: boolean;
   surface_type: string;
+  canopy_density: number;
   is_on_path: boolean;
   time_min: number;
   kcal: number;
@@ -108,7 +109,7 @@ interface BiomechanicalResponse {
     mide_global: number;
     mide_dimensions: MideDimensions;
     ccr: number;
-    climate_source: "api" | "simulation";
+    climate_source: "api" | "simulation" | "forecast";
     climate_timestamp: string | null;
   };
   segments: Array<{
@@ -122,6 +123,7 @@ interface BiomechanicalResponse {
     metabolic_rate_w: number;
     is_eccentric_fatigue: boolean;
     surface_type: string;
+    canopy_density: number;
     is_on_path: boolean;
     time_min: number;
     kcal: number;
@@ -144,7 +146,7 @@ export interface ClimateScenarioMetrics {
   total_kcal: number;
   estimated_time_h: number;
   ccr: number;
-  climate_source: "api" | "simulation";
+  climate_source: "api" | "simulation" | "forecast";
 }
 
 export interface ClimateComparison {
@@ -242,6 +244,8 @@ export const useRouteStore = defineStore("route", () => {
   const selectedSegmentSeq = ref<number | null>(null);
   const isSimulationMode = ref(false);
   const currentProfile = ref<HikerProfile | null>(null);
+  // ISO datetime of the planned hike start; null = "starts now" (CLI-10).
+  const currentStartDatetime = ref<string | null>(null);
   const climateComparison = ref<ClimateComparison | null>(null);
   const routeGraph = ref<RouteGraph | null>(null);
   const optimalPath = ref<OptimalPathResult | null>(null);
@@ -287,11 +291,13 @@ export const useRouteStore = defineStore("route", () => {
   async function uploadAndAnalyze(
     file: File,
     profile: HikerProfile,
+    startDatetime: string | null = null,
   ): Promise<void> {
     isLoading.value = true;
     error.value = null;
     selectedSegmentSeq.value = null;
     currentProfile.value = { ...profile };
+    currentStartDatetime.value = startDatetime;
     routeGraph.value = null;
     optimalPath.value = null;
 
@@ -378,7 +384,11 @@ export const useRouteStore = defineStore("route", () => {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profile, velocity_model: "irmischer_clarke" }),
+        body: JSON.stringify({
+          profile,
+          velocity_model: "irmischer_clarke",
+          start_datetime: currentStartDatetime.value ?? undefined,
+        }),
       },
     );
 
@@ -405,6 +415,7 @@ export const useRouteStore = defineStore("route", () => {
       const body = {
         ...scenarioBody,
         profile: currentProfile.value ?? undefined,
+        start_datetime: currentStartDatetime.value ?? undefined,
         // SIM-04: ask the backend for the real-climate baseline in the same call.
         compare_with_real: true,
       };
@@ -504,6 +515,53 @@ export const useRouteStore = defineStore("route", () => {
     }
   }
 
+  /**
+   * DAT-07, DAT-08: override terrain attributes for a seq range (or the whole
+   * route when no bounds are given), then re-run the analysis — surface type
+   * feeds the terrain coefficient, rain degradation, and risk factors.
+   * Note: re-analysis uses real climate; an active simulation must be re-run.
+   */
+  async function updateSurface(payload: {
+    seqFrom?: number;
+    seqTo?: number;
+    surfaceType?: string;
+    canopyDensity?: number;
+  }): Promise<void> {
+    if (!analysis.value) return;
+
+    isLoading.value = true;
+    error.value = null;
+    try {
+      const response = await fetch(
+        `${API_BASE}/routes/${analysis.value.route_id}/segments`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            seq_from: payload.seqFrom,
+            seq_to: payload.seqTo,
+            surface_type: payload.surfaceType,
+            canopy_density: payload.canopyDensity,
+          }),
+        },
+      );
+      if (!response.ok)
+        throw new Error(
+          `Surface update failed: ${await parseApiError(response)}`,
+        );
+    } catch (err) {
+      error.value =
+        err instanceof Error
+          ? err.message
+          : "Error desconocido al actualizar la superficie";
+      isLoading.value = false;
+      return;
+    }
+    isLoading.value = false;
+
+    await refreshRealClimate();
+  }
+
   /** GRF-01: fetch graph topology (nodes + edges) so a map UI can pick routing nodes. */
   async function loadRouteGraph(): Promise<void> {
     if (!analysis.value) return;
@@ -572,6 +630,7 @@ export const useRouteStore = defineStore("route", () => {
     selectedSegmentSeq.value = null;
     isSimulationMode.value = false;
     currentProfile.value = null;
+    currentStartDatetime.value = null;
     climateComparison.value = null;
     routeGraph.value = null;
     optimalPath.value = null;
@@ -591,6 +650,7 @@ export const useRouteStore = defineStore("route", () => {
     uploadAndAnalyze,
     runSimulation,
     refreshRealClimate,
+    updateSurface,
     loadRouteGraph,
     computeOptimalPath,
     clearOptimalPath,

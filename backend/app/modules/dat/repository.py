@@ -10,7 +10,7 @@ import uuid
 
 from geoalchemy2.shape import from_shape
 from shapely.geometry import LineString, mapping
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -87,6 +87,41 @@ async def list_dem_sources(db: AsyncSession) -> list[DEMSource]:
         select(DEMSource).order_by(DEMSource.priority.desc())
     )
     return list(result.scalars().all())
+
+
+async def update_segments_surface(
+    db: AsyncSession,
+    *,
+    route_id: uuid.UUID,
+    surface_type: str | None,
+    canopy_density: float | None,
+    seq_from: int | None = None,
+    seq_to: int | None = None,
+) -> int:
+    """
+    Bulk-update terrain attributes for a route's segments (DAT-07, DAT-08).
+
+    seq bounds are inclusive; when both are None the whole route is updated.
+    Returns the number of updated rows.
+    """
+    values: dict = {}
+    if surface_type is not None:
+        values["surface_type"] = surface_type
+    if canopy_density is not None:
+        values["canopy_density"] = canopy_density
+
+    stmt = update(Segment).where(Segment.route_id == route_id)
+    if seq_from is not None:
+        stmt = stmt.where(Segment.seq >= seq_from)
+    if seq_to is not None:
+        stmt = stmt.where(Segment.seq <= seq_to)
+
+    result = await db.execute(stmt.values(**values))
+    await db.flush()
+    # Segments may already be loaded in the identity map (e.g. by a prior
+    # get_route in the same request); expire so re-reads see the new values.
+    db.expire_all()
+    return result.rowcount
 
 
 async def get_route(db: AsyncSession, route_id: uuid.UUID) -> Route | None:

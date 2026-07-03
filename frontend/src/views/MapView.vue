@@ -6,6 +6,7 @@ import RouteMap from '@/components/map/RouteMap.vue'
 import HikerProfileForm from '@/components/sidebar/HikerProfileForm.vue'
 import RouteSummary from '@/components/sidebar/RouteSummary.vue'
 import MideIndicator from '@/components/sidebar/MideIndicator.vue'
+import SegmentSurfaceEditor from '@/components/sidebar/SegmentSurfaceEditor.vue'
 import FileUploader from '@/components/upload/FileUploader.vue'
 import ClimateSliders from '@/components/simulation/ClimateSliders.vue'
 import ClimateToggle from '@/components/simulation/ClimateToggle.vue'
@@ -141,8 +142,12 @@ function directionLabel(direction: string): string {
   return 'Plano'
 }
 
+// Planned hike start as a datetime-local string; empty means "starts now".
+const hikeStart = ref('')
+
 async function analyzeRoute(file: File, selectedProfile: HikerProfile): Promise<void> {
-  await routeStore.uploadAndAnalyze(file, selectedProfile)
+  const startIso = hikeStart.value ? new Date(hikeStart.value).toISOString() : null
+  await routeStore.uploadAndAnalyze(file, selectedProfile, startIso)
 }
 
 function updateClimate(value: ClimateOverride): void {
@@ -152,6 +157,21 @@ function updateClimate(value: ClimateOverride): void {
 async function applyScenario(scenario: SimulationScenario): Promise<void> {
   simulation.applyScenario(scenario)
   await simulation.runSimulation()
+}
+
+async function applySurface(payload: {
+  surfaceType: string
+  canopyDensity: number
+  wholeRoute: boolean
+}): Promise<void> {
+  const segment = selectedSegment.value
+  if (!segment) return
+  await routeStore.updateSurface({
+    surfaceType: payload.surfaceType,
+    canopyDensity: payload.canopyDensity,
+    seqFrom: payload.wholeRoute ? undefined : segment.seq,
+    seqTo: payload.wholeRoute ? undefined : segment.seq,
+  })
 }
 </script>
 
@@ -208,6 +228,23 @@ async function applyScenario(scenario: SimulationScenario): Promise<void> {
 
       <div class="flex-1 space-y-4 overflow-y-auto overscroll-contain p-4">
         <HikerProfileForm v-model="profile" :is-valid="isValid()" :disabled="isLoading" />
+
+        <section class="card bg-base-100 shadow-md">
+          <div class="card-body gap-2 p-4">
+            <h2 class="card-title text-sm font-semibold uppercase tracking-wider text-base-content/60">
+              Inicio de la caminata
+            </h2>
+            <p class="text-xs text-base-content/60">
+              El análisis usa el pronóstico de cada hora del recorrido. Vacío = ahora.
+            </p>
+            <input
+              v-model="hikeStart"
+              type="datetime-local"
+              class="input input-bordered input-sm"
+              :disabled="isLoading"
+            />
+          </div>
+        </section>
 
         <FileUploader
           :profile="profile"
@@ -309,6 +346,13 @@ async function applyScenario(scenario: SimulationScenario): Promise<void> {
                 bajada fatigante
               </span>
             </div>
+
+            <SegmentSurfaceEditor
+              class="mt-3"
+              :segment="selectedSegment"
+              :disabled="isLoading"
+              @apply="applySurface"
+            />
           </div>
         </section>
       </div>

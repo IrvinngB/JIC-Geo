@@ -9,8 +9,12 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.modules.cli.schemas import ClimateData
-from app.modules.cli.service import grid_zone_id, normalize_open_meteo_payload
+from app.modules.cli.schemas import ClimateData, ClimateTimeline
+from app.modules.cli.service import (
+    grid_zone_id,
+    normalize_open_meteo_forecast,
+    normalize_open_meteo_payload,
+)
 
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 
@@ -35,6 +39,41 @@ async def fetch_open_meteo(lat: float, lon: float) -> ClimateData:
         response = await client.get(OPEN_METEO_URL, params=params)
         response.raise_for_status()
     return normalize_open_meteo_payload(response.json(), lat=lat, lon=lon)
+
+
+async def fetch_open_meteo_forecast(
+    lat: float,
+    lon: float,
+    *,
+    start: datetime,
+    forecast_hours: int = 36,
+) -> ClimateTimeline:
+    """Fetch an hourly forecast window covering the hike from Open-Meteo. CLI-10.
+
+    `forecast_hours` bounds the window after `start`; Open-Meteo serves up to
+    16 days ahead, beyond that the request fails and the caller falls back.
+    """
+    end = start + timedelta(hours=forecast_hours)
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "hourly": ",".join(
+            [
+                "temperature_2m",
+                "relative_humidity_2m",
+                "precipitation",
+                "uv_index",
+                "shortwave_radiation",
+            ]
+        ),
+        "timezone": "UTC",
+        "start_date": start.astimezone(timezone.utc).date().isoformat(),
+        "end_date": end.astimezone(timezone.utc).date().isoformat(),
+    }
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(OPEN_METEO_URL, params=params)
+        response.raise_for_status()
+    return normalize_open_meteo_forecast(response.json(), lat=lat, lon=lon, start=start)
 
 
 async def get_cached_climate(

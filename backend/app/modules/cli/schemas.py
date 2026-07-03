@@ -8,7 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
-ClimateSource = Literal["api", "simulation"]
+ClimateSource = Literal["api", "simulation", "forecast"]
 
 
 class ClimateData(BaseModel):
@@ -22,6 +22,20 @@ class ClimateData(BaseModel):
     source: ClimateSource
     timestamp: datetime
     zone_id: str | None = None
+    # Kept so WBGT can be recomputed after elevation-based temperature adjustment.
+    shortwave_radiation_w_m2: float | None = None
+
+
+class ClimateTimeline(BaseModel):
+    """Hourly climate along a hike, indexed by whole hours after `start`. CLI-10.
+
+    `reference_elevation_m` is the elevation of the forecast grid point; segments
+    at a different elevation get a lapse-rate temperature correction.
+    """
+
+    start: datetime
+    hours: list[ClimateData] = Field(min_length=1)
+    reference_elevation_m: float | None = None
 
 
 class ClimateCurrentResponse(ClimateData):

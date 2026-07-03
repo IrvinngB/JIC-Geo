@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
@@ -16,8 +17,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.db.session import get_db
 from app.modules.cli import repository as cli_repo
-from app.modules.cli.schemas import ClimateData, ClimateOverride
-from app.modules.cli.service import cardiovascular_drift_multiplier, climate_from_override, velocity_rain_factor
+from app.modules.cli.schemas import ClimateData, ClimateOverride, ClimateTimeline
+from app.modules.cli.service import (
+    cardiovascular_drift_multiplier,
+    climate_at,
+    climate_from_override,
+    constant_timeline,
+    velocity_rain_factor,
+)
 from app.modules.dat import repository as dat_repo
 from app.modules.dat import service as dat_service
 from app.modules.met import repository as met_repo
@@ -67,6 +74,7 @@ class BiomechanicalSegmentOut(BaseModel):
     metabolic_rate_w: float
     is_eccentric_fatigue: bool
     surface_type: str
+    canopy_density: float
     is_on_path: bool
     time_min: float
     kcal: float
@@ -102,6 +110,10 @@ class BiomechanicalRequest(BaseModel):
     velocity_model: VelocityModel = VelocityModel.IRMISCHER_CLARKE
     segment_length_m: float = Field(default=settings.segment_length_m, gt=0)
     climate: ClimateOverride | None = None
+    start_datetime: datetime | None = Field(
+        default=None,
+        description="When the hike starts (UTC). Defaults to now. Drives per-segment hourly forecast (CLI-10).",
+    )
 
 
 class BiomechanicalResponse(BaseModel):
@@ -183,6 +195,7 @@ async def simulate_route(
             profile=payload.profile,
             velocity_model=payload.velocity_model,
             climate=None,
+            start_datetime=payload.start_datetime,
         )
         real_response = await _analyze_route(db, route_id, real_request)
 
@@ -190,6 +203,7 @@ async def simulate_route(
         profile=payload.profile,
         velocity_model=payload.velocity_model,
         climate=override,
+        start_datetime=payload.start_datetime,
     )
     simulated_response = await _analyze_route(db, route_id, simulated_request)
 
@@ -293,31 +307,49 @@ async def get_route_risk(
     )
 
 
-async def _resolve_climate(
+def _default_climate() -> ClimateData:
+    return climate_from_override(
+        ClimateOverride(temperature_c=25, humidity_pct=50, precip_mm=0, uv_index=3)
+    )
+
+
+async def _resolve_climate_timeline(
     db: AsyncSession,
     route_uuid: uuid.UUID,
     override: ClimateOverride | None,
-) -> ClimateData:
+    start: datetime,
+) -> ClimateTimeline:
+    """Resolve the hourly climate for the hike window. CLI-10.
+
+    Overrides become a constant timeline (SIM-01/02). Otherwise fetch the hourly
+    forecast at the route centroid; on failure fall back to cached/current
+    weather, and lastly to a neutral default.
+    """
     if override is not None:
-        return climate_from_override(override)
+        return constant_timeline(climate_from_override(override), start)
 
     centroid = await cli_repo.get_route_centroid(db, str(route_uuid))
     if centroid is None:
-        return climate_from_override(
-            ClimateOverride(temperature_c=25, humidity_pct=50, precip_mm=0, uv_index=3)
-        )
+        return constant_timeline(_default_climate(), start)
     lat, lon = centroid
+
+    try:
+        timeline = await cli_repo.fetch_open_meteo_forecast(lat, lon, start=start)
+        # Keep the shared climate_zones cache fresh for graph routing (GRF-08).
+        await cli_repo.upsert_climate_zone(db, timeline.hours[0], lat, lon)
+        return timeline
+    except Exception:
+        pass
+
     cached = await cli_repo.get_cached_climate(db, lat, lon)
     if cached is not None:
-        return cached
+        return constant_timeline(cached, start)
     try:
         climate = await cli_repo.fetch_open_meteo(lat, lon)
     except Exception:
-        climate = climate_from_override(
-            ClimateOverride(temperature_c=25, humidity_pct=50, precip_mm=0, uv_index=3)
-        )
+        return constant_timeline(_default_climate(), start)
     await cli_repo.upsert_climate_zone(db, climate, lat, lon)
-    return climate
+    return constant_timeline(climate, start)
 
 
 async def _analyze_route(
@@ -353,7 +385,10 @@ async def _analyze_route(
     profile = payload.profile
     v_factor = velocity_factor(profile)
 
-    climate = await _resolve_climate(db, route_uuid, payload.climate)
+    start = payload.start_datetime or datetime.now(timezone.utc)
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=timezone.utc)
+    timeline = await _resolve_climate_timeline(db, route_uuid, payload.climate, start)
     risk_weights = RiskWeights(
         metabolic_cost=settings.ahp_metabolic_cost,
         velocity_degradation=settings.ahp_velocity_degradation,
@@ -373,13 +408,23 @@ async def _analyze_route(
     exact_segments = 0
     elapsed_time_min = 0.0
     off_path_count = 0
+    max_wbgt = float("-inf")
 
     for seg in segments_db:
         slope = seg.slope_pct or 0.0
         length_m = seg.length_m or 0.0
         length_km = length_m / 1000.0
 
+        # CLI-10: climate for the hour the hiker reaches this segment, with a
+        # lapse-rate temperature correction for the segment's elevation.
+        seg_elevations = [e for e in (seg.elevation_start, seg.elevation_end) if e is not None]
+        seg_elevation = sum(seg_elevations) / len(seg_elevations) if seg_elevations else None
+        climate = climate_at(timeline, elapsed_time_min, seg_elevation)
+        max_wbgt = max(max_wbgt, climate.wbgt)
+
         surface_type = seg.surface_type or "dirt"
+        # `is not None` (not `or`): a user-set canopy of 0.0 is a valid value.
+        canopy_density = seg.canopy_density if seg.canopy_density is not None else 0.5
         eta = terrain_eta(surface_type)
         is_on_path = is_on_path_surface(surface_type)
 
@@ -462,7 +507,7 @@ async def _analyze_route(
                 metabolic_rate_w=metabolic_rate_w,
                 elapsed_time_min=elapsed_time_min,
                 segment_time_min=time_min,
-                canopy_density=seg.canopy_density or 0.5,
+                canopy_density=canopy_density,
                 surface_type=surface_type,
                 is_on_path=is_on_path,
                 wbgt=climate.wbgt,
@@ -499,6 +544,7 @@ async def _analyze_route(
                 metabolic_rate_w=round(metabolic_rate_w, 1),
                 is_eccentric_fatigue=is_eccentric,
                 surface_type=surface_type,
+                canopy_density=canopy_density,
                 is_on_path=is_on_path,
                 time_min=round(time_min, 2),
                 kcal=round(kcal, 1),
@@ -544,7 +590,7 @@ async def _analyze_route(
         max_abs_slope=max((abs(seg.slope_pct or 0.0) for seg in segments_db), default=0.0),
         off_path_ratio=off_path_ratio,
         total_time_h=total_time_h,
-        wbgt=climate.wbgt,
+        wbgt=max_wbgt,  # worst heat stress the hiker will face along the hike
         total_length_m=total_distance_km * 1000.0,
     )
     segments_out = [
@@ -571,8 +617,10 @@ async def _analyze_route(
         mide_global=route_risk.mide_global,
         mide_dimensions=route_risk.mide_dimensions,
         ccr=route_risk.ccr,
-        climate_source=climate.source,
-        climate_timestamp=climate.timestamp.isoformat() if climate.timestamp else None,
+        climate_source=timeline.hours[0].source,
+        climate_timestamp=(
+            timeline.hours[0].timestamp.isoformat() if timeline.hours[0].timestamp else None
+        ),
     )
 
     return BiomechanicalResponse(
