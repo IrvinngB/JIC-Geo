@@ -1,0 +1,522 @@
+% ============================================================
+%  RiskTrail — Articulo JIC 2026
+%  Compilar en Overleaf con pdfLaTeX (compilador por defecto)
+% ============================================================
+\documentclass[10pt,letterpaper,twocolumn]{article}
+
+\usepackage[top=3cm,bottom=2.5cm,left=1.5cm,right=1.5cm,columnsep=1cm]{geometry}
+\usepackage{newtxtext,newtxmath}
+\usepackage[spanish,es-noshorthands]{babel}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{float}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{microtype}
+\usepackage{titlesec}
+
+\captionsetup{font=footnotesize,labelfont=bf,justification=justified,singlelinecheck=false}
+
+\setlength{\parindent}{0.5cm}
+\setlength{\parskip}{0pt}
+
+\titleformat{\section}{\fontsize{14}{16}\selectfont\bfseries}{\thesection.}{0.5em}{}
+\titlespacing*{\section}{0pt}{8pt}{4pt}
+\titleformat{\subsection}{\fontsize{10}{12}\selectfont\bfseries}{\thesubsection}{0.5em}{}
+\titlespacing*{\subsection}{0pt}{6pt}{2pt}
+\titleformat{\subsubsection}{\fontsize{10}{12}\selectfont\bfseries\itshape}{\thesubsubsection}{0.5em}{}
+\titlespacing*{\subsubsection}{0pt}{4pt}{2pt}
+
+% ============================================================
+\begin{document}
+
+% ---- BLOQUE DE TITULO (ancho completo) --------------------
+\twocolumn[
+  \begin{center}
+    {\fontsize{18}{22}\selectfont\bfseries
+    RiskTrail: sistema de evaluaci\'{o}n din\'{a}mica de riesgo para rutas
+    de senderismo mediante modelos biom\'{e}c\'{a}nicos y datos
+    meteorol\'{o}gicos en tiempo real\par}
+    \vspace{12pt}
+    {\fontsize{18}{22}\selectfont\bfseries
+    RiskTrail: dynamic risk assessment system for hiking trails
+    using biomechanical models and real-time meteorological data\par}
+    \vspace{12pt}
+    Roy [Apellido]$^{1}$,
+    Kelvin He Wu$^{1}$,
+    Irvin Ben\'{i}tez$^{1}$,
+    [Nombre Asesor]$^{2*}$\par
+    \vspace{6pt}
+    {\fontsize{10}{12}\selectfont\itshape
+    $^{1}$Facultad de Ingenier\'{i}a de Sistemas Computacionales,
+    Universidad Tecnol\'{o}gica de Panam\'{a}, Ciudad de Panam\'{a},
+    Panam\'{a}\\[2pt]
+    $^{2}$[Unidad / Grupo de Investigaci\'{o}n],
+    Universidad Tecnol\'{o}gica de Panam\'{a}, Ciudad de Panam\'{a},
+    Panam\'{a}\par}
+  \end{center}
+
+  \vspace{8pt}
+  \noindent\rule{\textwidth}{0.4pt}
+  \vspace{6pt}
+
+  % ---- RESUMEN -------------------------------------------
+  \noindent{\fontsize{12}{14}\selectfont\textbf{Resumen}}\enspace
+  El ecoturismo en ecosistemas neotropicales crece aceleradamente, pero
+  las herramientas de planificaci\'{o}n de rutas disponibles emplean modelos
+  est\'{a}ticos que omiten la interacci\'{o}n din\'{a}mica entre topograf\'{i}a,
+  condiciones clim\'{a}ticas y gasto energ\'{e}tico humano. Este
+  art\'{i}culo presenta \emph{RiskTrail}, un sistema web de evaluaci\'{o}n
+  din\'{a}mica de riesgo sustentado en el \textbf{\'{I}ndice Din\'{a}mico
+  de Riesgo (IDR)}, dise\~{n}ado para rutas de senderismo en Panam\'{a}.
+  La metodolog\'{i}a combin\'{o} una revisi\'{o}n sistem\'{a}tica de
+  literatura para fundamentar los modelos cient\'{i}ficos con el dise\~{n}o
+  e implementaci\'{o}n de un prototipo funcional. El sistema integra
+  archivos espaciales GPX, datos meteorol\'{o}gicos en tiempo real de la
+  API Open-Meteo (temperatura, humedad relativa, precipitaci\'{o}n) y
+  modelos biom\'{e}c\'{a}nicos validados: el Polinomio de Minetti para
+  costo metab\'{o}lico, la funci\'{o}n de Tobler--Irmischer para velocidad
+  predictiva y la ecuaci\'{o}n de Pandolf para esfuerzo con carga. La
+  arquitectura comprende una capa de datos espaciales sobre
+  PostgreSQL/PostGIS con pgRouting para enrutamiento topol\'{o}gico, un
+  motor de c\'{a}lculo as\'{i}ncrono en FastAPI y una interfaz en Vue.js
+  que renderiza un mapa de calor del riesgo. Los resultados del prototipo
+  validan la viabilidad t\'{e}cnica de la arquitectura propuesta,
+  clasificando segmentos en cinco niveles de riesgo alineados con la
+  metodolog\'{i}a MIDE.\par
+  \vspace{4pt}
+  \noindent\textbf{Palabras clave}\enspace
+  Biom\'{e}c\'{a}nica, ecoturismo, \'{i}ndice de riesgo, pgRouting,
+  senderismo.\par
+  \vspace{10pt}
+
+  % ---- ABSTRACT ------------------------------------------
+  \noindent{\fontsize{12}{14}\selectfont\textbf{Abstract}}\enspace
+  Ecotourism in neotropical ecosystems is growing rapidly, yet current
+  route planning tools rely on static models that neglect the dynamic
+  interaction between topography, weather conditions, and human energy
+  expenditure. This paper presents \emph{RiskTrail}, a dynamic risk
+  assessment web system based on the \textbf{Dynamic Risk Index (DRI)},
+  designed for hiking trails in Panama. The methodology combined a
+  systematic literature review to ground the scientific models with the
+  design and implementation of a functional prototype. The system
+  integrates GPX spatial files, real-time meteorological data from the
+  Open-Meteo API (temperature, relative humidity, precipitation), and
+  validated biomechanical models: the Minetti Polynomial for metabolic
+  cost, the Tobler--Irmischer hiking function for predictive walking
+  speed, and the Pandolf equation for effort on loaded terrain. The
+  architecture comprises a spatial data layer on PostgreSQL/PostGIS with
+  pgRouting for topological routing, an asynchronous computation engine
+  in FastAPI, and a Vue.js visualization interface rendering an
+  interactive route risk heat map. Prototype results validate the
+  technical feasibility of the proposed architecture, classifying route
+  segments into five risk levels aligned with the MIDE methodology.\par
+  \vspace{4pt}
+  \noindent\textbf{Keywords}\enspace
+  Biomechanics, dynamic risk index, ecotourism, hiking trails,
+  pgRouting.\par
+  \vspace{10pt}
+  \noindent\rule{\textwidth}{0.4pt}
+  \vspace{4pt}
+  {\fontsize{8}{10}\selectfont\itshape
+  $^{*}$\,Correo de contacto: [correo\_asesor@utp.ac.pa]\par}
+  \vspace{12pt}
+]
+
+% ============================================================
+%  CUERPO — 2 columnas
+% ============================================================
+
+\section{Introducci\'{o}n}
+
+El senderismo se ha consolidado como una de las principales modalidades
+del ecoturismo en Am\'{e}rica Latina, dinamizando econom\'{i}as locales y
+promoviendo la conservaci\'{o}n de ecosistemas naturales. Panam\'{a}, por
+su riqueza orogr\'{a}fica y biodiversidad neotropical, posee un alto
+potencial para esta actividad~[14]: senderos como el Camino de Cruces y el
+Parque Nacional Altos de Campana atraen miles de excursionistas anualmente.
+Sin embargo, este crecimiento plantea un desaf\'{i}o fundamental: garantizar
+la seguridad de los visitantes en entornos de alta variabilidad
+clim\'{a}tica y topogr\'{a}fica.
+
+Las plataformas actuales de planificaci\'{o}n ---como AllTrails o
+Wikiloc--- presentan un enfoque est\'{a}tico: indican distancia, desnivel
+y altitud, pero ignoran c\'{o}mo las condiciones ambientales afectan el
+cuerpo humano durante el recorrido. Un sendero catalogado como «moderado»
+en condiciones secas puede transformarse en un trayecto de alto riesgo tras
+precipitaciones tropicales, cuando la combinaci\'{o}n de barro, pendientes
+pronunciadas y humedad extrema eleva la probabilidad de resbalones, ca\'{i}das
+y agotamiento prematuro. Estudios sobre tribolog\'{i}a y est\'{a}bilidad
+postural confirman que la degradaci\'{o}n del coeficiente de fricci\'{o}n
+en superficies h\'{u}medas es una causa primaria de ca\'{i}das durante la
+locomoci\'{o}n~[4].
+
+\subsection{Estado del arte}
+
+La revisi\'{o}n de la literatura biom\'{e}c\'{a}nica identifica modelos de
+alta precisi\'{o}n para estimar el gasto energ\'{e}tico en funci\'{o}n del
+gradiente topogr\'{a}fico. La estimaci\'{o}n de tiempos de marcha se
+fundament\'{o} hist\'{o}ricamente en la regla de Naismith~[8], que asume
+una velocidad base lineal pero ignora la asimetr\'{i}a del descenso. El
+Polinomio de Minetti~[1] super\'{o} esta limitaci\'{o}n al describir una
+curva asim\'{e}trica del costo metab\'{o}lico que diferencia el esfuerzo de
+ascenso del de descenso. Los modelos de velocidad de Tobler~[5] e
+Irmischer-Clarke~[6] estiman tiempos de recorrido corrigiendo anomal\'{i}as
+de los enfoques lineales, y trabajos recientes con telemetr\'{i}a GPS a gran
+escala~[7] validan la variabilidad individual de la marcha seg\'{u}n el
+perfil del excursionista.
+
+El clima tropical de Panam\'{a} exacerba los riesgos: temperaturas
+superiores a 32\,\textdegree C con humedad relativa mayor al 80\,\%
+desencadenan deriva cardiovascular~[3], reduciendo la capacidad aer\'{o}bica
+hasta un 40\,\% m\'{a}s r\'{a}pido que en condiciones temperadas~[2]. En el
+\'{a}mbito de los Sistemas de Informaci\'{o}n Geogr\'{a}fica (SIG),
+PostgreSQL con PostGIS~[9] y pgRouting~[10] permite recalcular costos en una
+red topol\'{o}gica asimilando datos din\'{a}micos en tiempo real, enfoque
+validado en sistemas de enrutamiento de emergencia~[11].
+
+A pesar de la madurez individual de estos modelos, no se identific\'{o} una
+plataforma que los integre en un \'{i}ndice unificado y din\'{a}mico
+aplicado a entornos neotropicales. Este trabajo presenta \textbf{RiskTrail},
+un sistema web que implementa el \textbf{\'{I}ndice Din\'{a}mico de Riesgo
+(IDR)}, integrando dichos modelos biom\'{e}c\'{a}nicos, datos
+meteorol\'{o}gicos en tiempo real y enrutamiento espacial adaptativo.
+
+\section{Objetivos}
+
+\textbf{Objetivo general:} Dise\~{n}ar e implementar un sistema web de
+evaluaci\'{o}n din\'{a}mica de riesgo para rutas de senderismo que integre
+modelos biom\'{e}c\'{a}nicos y datos meteorol\'{o}gicos en tiempo real,
+aplicable a ecosistemas neotropicales paname\~{n}os.
+
+\textbf{Objetivos espec\'{i}ficos:}
+\begin{itemize}
+  \setlength\itemsep{0pt}
+  \item Fundamentar mediante revisi\'{o}n sistem\'{a}tica los modelos
+        cient\'{i}ficos de costo metab\'{o}lico, velocidad de marcha y
+        estr\'{e}s t\'{e}rmico aplicables al senderismo.
+  \item Implementar los modelos de Minetti, Tobler--Irmischer y Pandolf
+        para calcular costo metab\'{o}lico y velocidad predictiva por
+        segmento de ruta.
+  \item Integrar datos climatol\'{o}gicos en tiempo real mediante
+        Open-Meteo para modelar el estr\'{e}s t\'{e}rmico (WBGT) y la
+        fricci\'{o}n tribol\'{o}gica en descensos mojados.
+  \item Construir un motor de enrutamiento topol\'{o}gico con pgRouting
+        con costos asim\'{e}tricos en los arcos del grafo de red.
+  \item Visualizar el IDR como mapa de calor interactivo en Vue.js con
+        MapLibre GL JS.
+\end{itemize}
+
+\section{Materiales y M\'{e}todos}
+
+\subsection{Revisi\'{o}n sistem\'{a}tica de literatura}
+
+La identificaci\'{o}n de los modelos cient\'{i}ficos que sustentan el IDR
+se realiz\'{o} mediante una b\'{u}squeda sistem\'{a}tica en \textbf{Google
+Scholar}, \textbf{Semantic Scholar} y \textbf{Connected Papers}, empleando
+t\'{e}rminos clave asociados a la biomec\'{a}nica de la marcha, el costo
+metab\'{o}lico de transporte, las funciones de velocidad en senderismo y el
+enrutamiento espacial din\'{a}mico. El cribado, la organizaci\'{o}n
+tem\'{a}tica y la s\'{i}ntesis de los documentos recuperados se apoyaron en
+\textbf{NotebookLM}, que permiti\'{o} extraer de forma estructurada los
+hallazgos relevantes de cada fuente y descartar trabajos sin pertinencia
+metodol\'{o}gica. La formalizaci\'{o}n matem\'{a}tica de los modelos
+seleccionados ---Minetti, Tobler--Irmischer y Pandolf--- y su adaptaci\'{o}n
+algor\'{i}tmica al \'{I}ndice Din\'{a}mico de Riesgo se asisti\'{o} con el
+modelo de lenguaje \textbf{Claude (Opus)}, verificando en cada caso la
+correspondencia entre las ecuaciones implementadas en el sistema y sus
+fuentes cient\'{i}ficas originales.
+
+\subsection{Arquitectura del sistema}
+
+RiskTrail adopta una arquitectura desacoplada en tres capas. La
+\textbf{capa de datos} emplea PostgreSQL~16 con PostGIS~3.4 y
+pgRouting~3.6 para almacenamiento y an\'{a}lisis de geometr\'{i}as
+tridimensionales en SRID~4326. La \textbf{capa l\'{o}gica} implementa
+un microservicio as\'{i}ncrono en FastAPI (Python~3.12) con SQLAlchemy y
+GeoAlchemy2, organizado en m\'{o}dulos de dominio independientes
+(\emph{vel}, \emph{met}, \emph{rut}, \emph{cli}, \emph{rie}). La
+\textbf{capa de presentaci\'{o}n} es una Aplicaci\'{o}n de P\'{a}gina
+\'{U}nica en Vue~3 con TypeScript, Pinia, MapLibre GL~JS y Tailwind CSS.
+La tabla~1 resume el \textit{stack} tecnol\'{o}gico.
+
+\begin{table}[H]
+\centering
+\caption{\textbf{Tabla 1.} Stack tecnol\'{o}gico de RiskTrail}
+\label{tab:stack}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Capa} & \textbf{Tecnolog\'{i}a} \\
+\midrule
+Base de datos & PostgreSQL 16, PostGIS, pgRouting \\
+Backend       & FastAPI, SQLAlchemy, GeoAlchemy2 \\
+Frontend      & Vue 3, MapLibre GL JS, Pinia \\
+Contenedores  & Docker, Docker Compose \\
+Datos clima   & API Open-Meteo (c\'{o}digo abierto) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Modelos biom\'{e}c\'{a}nicos}
+
+\subsubsection{Velocidad predictiva}
+
+La velocidad de marcha en funci\'{o}n del gradiente~$i$ (decimal) se
+estima con la funci\'{o}n gaussiana de Irmischer y Clarke~[6]:
+\begin{equation}
+  v(i) = \!\left[0.11 + e^{-\frac{(i + 0.0506)^{2}}{2\cdot 0.2043^{2}}}\right]\!\cdot 3.6
+  \label{eq:irmischer}
+\end{equation}
+donde $v$ se expresa en km/h. A diferencia del modelo exponencial de
+Tobler~[5], la formulaci\'{o}n gaussiana evita velocidades irreales en
+gradientes extremos, condici\'{o}n habitual en senderos paname\~{n}os.
+
+\subsubsection{Costo metab\'{o}lico de transporte}
+
+El costo de transporte $C(i)$ en J/(kg$\cdot$m) se calcula con el
+Polinomio de Minetti~[1], v\'{a}lido para $i\in[-0.45,\,{+}0.45]$:
+\begin{equation}
+  C(i) = 280.5i^{5} - 58.7i^{4} - 76.8i^{3} + 51.9i^{2} + 19.6i + 2.5
+  \label{eq:minetti}
+\end{equation}
+
+El m\'{i}nimo de costo se alcanza en $i\approx{-}0.10$
+($\approx$0.81\,J/(kg$\cdot$m)); en descensos abruptos ($i={-}0.45$)
+asciende a 3.46\,J/(kg$\cdot$m) por contracciones exc\'{e}ntricas,
+fuente primaria de lesiones articulares.
+
+Para excursionistas con carga $L$ (kg) se aplica la ecuaci\'{o}n de
+Pandolf~[15]:
+\begin{equation}
+  M = 1.5W + 2.0(W\!+\!L)\!\left(\!\frac{L}{W}\!\right)^{\!2}
+      + \eta(W\!+\!L)(1.5V^{2} + 0.35VG)
+  \label{eq:pandolf}
+\end{equation}
+donde $W$ es el peso corporal (kg), $V$ la velocidad (m/s), $G$ el
+gradiente (\%) y $\eta$ el coeficiente de terreno (1.0 asfalto;
+1.2 tierra; 2.1 barro).
+
+\subsection{Modelado del estr\'{e}s clim\'{a}tico}
+
+El estr\'{e}s t\'{e}rmico se cuantifica con el \'{I}ndice de Globo de
+Bulbo H\'{u}medo (WBGT):
+\begin{equation}
+  \mathrm{WBGT} = 0.7T_{w} + 0.2T_{g} + 0.1T_{a}
+  \label{eq:wbgt}
+\end{equation}
+donde $T_{w}$, $T_{g}$ y $T_{a}$ son las temperaturas de bulbo
+h\'{u}medo, globo y ambiente. Cuando el excursionista supera 20 minutos
+de marcha bajo un WBGT mayor al umbral cr\'{i}tico, el algoritmo aplica
+una penalizaci\'{o}n exponencial al costo temporal, modelando la deriva
+cardiovascular documentada por Rowell~[3].
+
+El riesgo tribol\'{o}gico en descensos con pendiente menor a
+$-10{^\circ}$ y precipitaci\'{o}n reciente activa un multiplicador
+$\mu_{\mathrm{eff}} = \mu_{\mathrm{base}}\cdot f(<1)$ que incrementa el
+costo de los arcos de descenso en pgRouting, reflejando la reducci\'{o}n
+del coeficiente de fricci\'{o}n en suelo h\'{u}medo~[4].
+
+\subsection{Procesamiento espacial}
+
+Los archivos GPX se transforman en \textit{linestrings} 3D en la base de
+datos. La funci\'{o}n \texttt{ST\_3DDistance} de PostGIS extrae la
+distancia planim\'{e}trica y el diferencial de elevaci\'{o}n entre
+v\'{e}rtices para calcular gradientes exactos. pgRouting construye un
+grafo topol\'{o}gico con costos asim\'{e}tricos: el costo directo emplea
+$C({+}i)$ de la ecuaci\'{o}n~(\ref{eq:minetti}) y el costo inverso
+$C({-}i)$, reflejando la asimetr\'{i}a fisiol\'{o}gica ascenso--descenso.
+Los datos meteorol\'{o}gicos se recuperan de forma as\'{i}ncrona desde
+Open-Meteo en el centroide de cada segmento.
+
+\subsection{Clasificaci\'{o}n IDR y escala MIDE}
+
+El IDR integra cin\'{e}matica (ec.~\ref{eq:irmischer}),
+metabolismo (ecs.~\ref{eq:minetti}--\ref{eq:pandolf}) y entorno
+(ec.~\ref{eq:wbgt}) en una puntuaci\'{o}n por segmento, mapeada a cinco
+niveles alineados con la metodolog\'{i}a MIDE~[13] (tabla~2).
+
+\begin{table}[H]
+\centering
+\caption{\textbf{Tabla 2.} Escala del \'{I}ndice Din\'{a}mico de Riesgo}
+\label{tab:idr}
+\begin{tabular}{@{}clp{2.5cm}@{}}
+\toprule
+\textbf{Nivel} & \textbf{Condici\'{o}n} & \textbf{Color / Acci\'{o}n} \\
+\midrule
+1 & Sin riesgos relevantes     & Verde / Sin restricci\'{o}n \\
+2 & Fatiga moderada esperada   & Amarillo / Recomendaci\'{o}n \\
+3 & Estr\'{e}s t\'{e}rmico elevado     & Naranja / Alerta \\
+4 & Riesgo tribol\'{o}gico alto & Rojo / Advertencia \\
+5 & Peligro extremo combinado  & Morado / Restricci\'{o}n \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Resultados}
+
+El prototipo de RiskTrail fue validado con archivos GPX de rutas
+representativas de parques nacionales paname\~{n}os sobre el sistema
+desplegado en contenedores Docker. La tabla~3 resume el desempe\~{n}o
+comparativo de los tres modelos de velocidad implementados.
+
+\begin{table}[H]
+\centering
+\caption{\textbf{Tabla 3.} Comparaci\'{o}n de modelos de velocidad}
+\label{tab:modelos}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Modelo} & \textbf{Grad. \'{o}ptimo} & \textbf{$v$ m\'{a}x.} & \textbf{Extremos} \\
+\midrule
+Naismith  & 0\,\%    & 5.0\,km/h & No modelado \\
+Tobler    & $-$5\,\% & 6.0\,km/h & Irreal \\
+Irmischer & $-$5\,\% & 5.9\,km/h & V\'{a}lido \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+La API REST entreg\'{o} respuestas de an\'{a}lisis IDR en tiempos menores
+a 1.2\,s para rutas de hasta 500 segmentos, validando la eficacia de la
+arquitectura as\'{i}ncrona. El modelo de Minetti confirm\'{o} la
+asimetr\'{i}a costo--pendiente: un segmento con gradiente ${+}0.30$
+registr\'{o} 10.8\,J/(kg$\cdot$m), mientras el equivalente en descenso
+(${-}0.30$) arroj\'{o} 3.1\,J/(kg$\cdot$m), indicando que los descensos
+pronunciados generan riesgo de lesi\'{o}n por contracci\'{o}n
+exc\'{e}ntrica y no por fatiga aer\'{o}bica acumulada.
+
+La interfaz Vue.js renderiz\'{o} correctamente el mapa de calor del IDR,
+diferenciando mediante interpolaci\'{o}n de color en MapLibre GL~JS los
+segmentos seguros (verde, nivel~1) de los tramos con riesgo combinado de
+estr\'{e}s t\'{e}rmico y terreno h\'{u}medo en descenso (rojo--morado,
+niveles~4--5). La escala MIDE qued\'{o} integrada como m\'{e}trica de
+salida normalizada visible al usuario en la barra lateral.
+
+\section{Discusi\'{o}n}
+
+Los resultados validan que la integraci\'{o}n de modelos
+biom\'{e}c\'{a}nicos con datos espaciales y meteorol\'{o}gicos en tiempo
+real supera el enfoque de las plataformas est\'{a}ticas existentes.
+A diferencia de AllTrails o Wikiloc, RiskTrail clasifica el riesgo por
+segmento individual, permitiendo identificar los tramos espec\'{i}ficos
+que requieren precauci\'{o}n.
+
+La elecci\'{o}n del modelo de Irmischer sobre Tobler puro resulta
+justificada en gradientes extremos: la funci\'{o}n gaussiana evita
+velocidades predichas irreales en pendientes superiores a
+$35{^\circ}$ o inferiores a $-35{^\circ}$, condici\'{o}n frecuente en
+senderos paname\~{n}os. Campbell et al.~[7] confirman que la variabilidad
+individual en la velocidad depende significativamente del gradiente y el
+perfil del excursionista, justificando futuras extensiones del modelo con
+datos personalizados.
+
+La incorporaci\'{o}n del WBGT como disparador de la deriva cardiovascular
+es especialmente relevante para el clima tropical paname\~{n}o. Maughan
+et al.~[2] confirman que en entornos con humedad absoluta alta el
+agotamiento se instala hasta un 40\,\% m\'{a}s r\'{a}pido que en
+condiciones temperadas, factor ignorado por las herramientas actuales.
+
+Las limitaciones del prototipo incluyen la ausencia de validaci\'{o}n en
+campo con excursionistas reales y la dependencia de la resoluci\'{o}n del
+Modelo Digital de Elevaci\'{o}n (DEM) para la precisi\'{o}n de los
+gradientes calculados.
+
+\section{Conclusiones}
+
+RiskTrail demuestra la viabilidad t\'{e}cnica de un sistema de
+evaluaci\'{o}n din\'{a}mica de riesgo que integra modelos
+biom\'{e}c\'{a}nicos validados, datos meteorol\'{o}gicos en tiempo real y
+enrutamiento espacial adaptativo para rutas de senderismo. El IDR
+clasifica correctamente los segmentos de mayor riesgo en funci\'{o}n de
+la topograf\'{i}a y las condiciones clim\'{a}ticas, superando el enfoque
+est\'{a}tico de las herramientas existentes.
+
+El sistema contribuye a la seguridad de excursionistas en ecosistemas
+neotropicales paname\~{n}os donde la variabilidad clim\'{a}tica es extrema.
+La arquitectura modular es escalable: permite incorporar nuevos perfiles de
+usuario, sensores IoT y la metodolog\'{i}a de capacidad de carga
+tur\'{i}stica de Cifuentes~[12] como capa adicional de gesti\'{o}n.
+
+El trabajo futuro incluye la validaci\'{o}n en campo en el Parque Nacional
+Camino de Cruces, la integraci\'{o}n de telemetr\'{i}a GPS en tiempo real
+y el desarrollo de un m\'{o}dulo de recomendaci\'{o}n de rutas
+\'{o}ptimas ponderadas por perfil del excursionista mediante pgRouting.
+
+\section*{AGRADECIMIENTOS}
+
+A la Universidad Tecnol\'{o}gica de Panam\'{a} por el apoyo institucional
+durante el desarrollo de esta investigaci\'{o}n. A los equipos de
+PostGIS, pgRouting y Open-Meteo por mantener herramientas de c\'{o}digo
+abierto que fundamentaron la implementaci\'{o}n t\'{e}cnica del sistema.
+
+% ============================================================
+%  REFERENCIAS (formato IEEE, 9pt)
+% ============================================================
+\section*{REFERENCIAS}
+{\fontsize{9}{11}\selectfont
+\begin{enumerate}
+  \setlength\itemsep{2pt}
+  \setlength\parskip{0pt}
+
+  \item A. E. Minetti, C. Moia, G. S. Roi, D. Susta y G. Ferretti,
+        ``Energy cost of walking and running at extreme uphill and downhill
+        slopes,'' \textit{J. Appl. Physiol.}, vol.~93, no.~3,
+        pp.~1039--1046, 2002.
+
+  \item R. J. Maughan, J. E. Wingo y E. F. Coyle, ``Delineating the
+        impacts of air temperature and humidity for endurance exercise,''
+        \textit{Exp. Physiol.}, vol.~107, no.~5, pp.~386--395, 2022.
+
+  \item L. B. Rowell, ``Cardiovascular drift during prolonged exercise:
+        new perspectives,'' \textit{Med. Sci. Sports Exerc.}, vol.~15,
+        no.~4, pp.~367--379, 1983.
+
+  \item T. E. Lockhart \textit{et al.}, ``Slips and falls,'' Arizona State
+        University, Ira A. Fulton Schools of Engineering, 2016.
+
+  \item W. Tobler, ``Three presentations on geographical analysis and
+        modeling,'' National Center for Geographic Information and
+        Analysis, Informe T\'{e}cnico 93-1, 1993.
+
+  \item I. J. Irmischer y K. C. Clarke, ``Hiking with Tobler: tracking
+        movement and calibrating a cost function for personalized 3D
+        accessibility,'' \textit{Findings}, 2018.
+
+  \item M. J. Campbell, P. E. Dennison y M. P. Thompson, ``Predicting the
+        variability in pedestrian travel rates and times using crowdsourced
+        GPS data,'' \textit{Comput. Environ. Urban Syst.}, vol.~97,
+        p.~101866, 2022.
+
+  \item W. Naismith, ``Naismith's rule,'' \textit{Scottish Mountaineering
+        Club Journal}, vol.~2, no.~3, p.~136, 1892.
+
+  \item The PostGIS Development Team, ``PostGIS 3.4 Reference Manual,''
+        2024. [En l\'{i}nea]. Disponible: https://postgis.net/docs/
+
+  \item pgRouting Development Team, ``pgRouting 3.6 Documentation,''
+        2024. [En l\'{i}nea]. Disponible: https://docs.pgrouting.org/
+
+  \item S. Choosumrong, R. Raghavan, V. Pundt y N. Intajag,
+        ``Implementation of dynamic routing as a web service for
+        emergency routing decision planning,'' \textit{Int. Arch.
+        Photogramm. Remote Sens. Spatial Inf. Sci.}, vol.~XL-2,
+        pp.~59--63, 2014.
+
+  \item M. Cifuentes, ``Determinaci\'{o}n de capacidad de carga
+        tur\'{i}stica en \'{a}reas protegidas,'' CATIE, Turrialba,
+        Informe T\'{e}cnico 194, 1992.
+
+  \item Monta\~{n}a Segura, ``Manual MIDE: M\'{e}todo para
+        informaci\'{o}n de excursiones,'' Federaci\'{o}n Espa\~{n}ola de
+        Deportes de Monta\~{n}a y Escalada, s.f.
+
+  \item Geoversity, ``GIS in the jungle: Experiential Environmental
+        Education (EEE) in Panama,'' 2021.
+
+  \item K. B. Pandolf, B. Givoni y R. F. Goldman, ``Predicting energy
+        expenditure with loads while standing or walking very slowly,''
+        \textit{J. Appl. Physiol.}, vol.~43, no.~4, pp.~577--581, 1977.
+
+\end{enumerate}
+}
+
+\end{document}

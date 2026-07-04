@@ -25,6 +25,9 @@ data/samples/*.gpx
 .DS_Store
 Thumbs.db
 
+# Office lock files
+~$*
+
 # IDE
 .idea/
 .vscode/
