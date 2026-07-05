@@ -192,6 +192,7 @@ async def simulate_route(
             profile=payload.profile,
             velocity_model=payload.velocity_model,
             climate=None,
+            surface_type=payload.surface_type,
         )
         real_response = await _analyze_route(db, route_id, real_request)
 
@@ -199,6 +200,7 @@ async def simulate_route(
         profile=payload.profile,
         velocity_model=payload.velocity_model,
         climate=override,
+        surface_type=payload.surface_type,
     )
     simulated_response = await _analyze_route(db, route_id, simulated_request)
 

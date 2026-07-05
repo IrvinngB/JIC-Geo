@@ -21,3 +21,7 @@ class SimulationRequest(BaseModel):
     compare_with_real: bool = False
     profile: HikerProfile = Field(default_factory=HikerProfile)
     velocity_model: VelocityModel = VelocityModel.IRMISCHER_CLARKE
+    surface_type: str | None = Field(
+        default=None,
+        description="Override surface type for all segments during simulation.",
+    )

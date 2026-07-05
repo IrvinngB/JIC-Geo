@@ -420,6 +420,7 @@ export const useRouteStore = defineStore("route", () => {
       const body = {
         ...scenarioBody,
         profile: currentProfile.value ?? undefined,
+        surface_type: currentProfile.value?.surface_type,
         // SIM-04: ask the backend for the real-climate baseline in the same call.
         compare_with_real: true,
       };
