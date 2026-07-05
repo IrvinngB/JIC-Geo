@@ -57,6 +57,26 @@ const props = defineProps<{
         </select>
       </label>
 
+      <label class="form-control">
+        <span class="label-text text-xs font-medium">Tipo de superficie</span>
+        <select
+          v-model="profile.surface_type"
+          class="select select-bordered select-sm"
+          :disabled="props.disabled"
+        >
+          <option value="dirt">Tierra compacta</option>
+          <option value="paved">Pavimento</option>
+          <option value="gravel">Grava</option>
+          <option value="mud">Barro</option>
+          <option value="sand">Arena</option>
+          <option value="scrub">Matorral</option>
+          <option value="dense_scrub">Matorral denso</option>
+        </select>
+        <span class="label-text-alt text-xs text-base-content/50 mt-1">
+          Barro, arena y matorral reducen velocidad y suben la orientación MIDE.
+        </span>
+      </label>
+
       <div v-if="!isValid" class="alert alert-error py-2 text-xs">
         La carga debe ser menor al peso corporal y no puede ser negativa.
       </div>

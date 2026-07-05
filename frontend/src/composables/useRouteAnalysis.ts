@@ -29,6 +29,7 @@ export function useRouteAnalysis() {
       weight_kg: 70,
       load_kg: 10,
       fitness_level: 'medium',
+      surface_type: 'dirt',
     }
     await store.uploadAndAnalyze(file, defaultProfile)
   }

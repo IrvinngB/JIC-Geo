@@ -314,10 +314,14 @@ function renderRouteLayer(): void {
           ['get', 'risk_score'],
           0,
           '#22c55e',
-          45,
+          20,
           '#eab308',
-          75,
+          40,
+          '#f97316',
+          60,
           '#ef4444',
+          80,
+          '#a855f7',
         ],
       },
     })
@@ -536,15 +540,17 @@ function setBaseMap(baseMapId: BaseMapId): void {
 }
 
 function riskBadgeClass(score: number): string {
-  if (score >= 75) return 'badge-error'
-  if (score >= 45) return 'badge-warning'
+  if (score >= 80) return 'badge-secondary'
+  if (score >= 60) return 'badge-error'
+  if (score >= 40) return 'badge-warning'
+  if (score >= 20) return 'badge-warning badge-outline'
   return 'badge-success'
 }
 
 function buildPopupHTML(segment: RouteAnalysis['segments'][number]): string {
   const dir = segment.direction === 'ascent' ? 'Subida' : segment.direction === 'descent' ? 'Bajada' : 'Plano'
-  const badgeColor = segment.risk_score >= 75 ? '#ef4444' : segment.risk_score >= 45 ? '#f59e0b' : '#22c55e'
-  const badgeBg = segment.risk_score >= 75 ? 'rgba(239,68,68,0.15)' : segment.risk_score >= 45 ? 'rgba(245,158,11,0.15)' : 'rgba(34,197,94,0.15)'
+  const badgeColor = segment.risk_score >= 80 ? '#a855f7' : segment.risk_score >= 60 ? '#ef4444' : segment.risk_score >= 40 ? '#f97316' : segment.risk_score >= 20 ? '#eab308' : '#22c55e'
+  const badgeBg = segment.risk_score >= 80 ? 'rgba(168,85,247,0.15)' : segment.risk_score >= 60 ? 'rgba(239,68,68,0.15)' : segment.risk_score >= 40 ? 'rgba(249,115,22,0.15)' : segment.risk_score >= 20 ? 'rgba(234,179,8,0.15)' : 'rgba(34,197,94,0.15)'
   const topRisk = segment.is_top_risk ? '<div style="color: #ef4444; font-size: 11px; font-weight: 600; margin-top: 6px;">⚠ Top 10% de riesgo</div>' : ''
   const ecc = segment.is_eccentric_fatigue ? '<div style="color: #ef4444; font-size: 10px; margin-top: 4px;">Bajada fatigante</div>' : ''
   return `

@@ -101,15 +101,19 @@ watch(selectedSegment, (segment) => {
 
 const selectedRiskLabel = computed(() => {
   const score = selectedSegment.value?.risk_score ?? 0
-  if (score >= 75) return 'Alto'
-  if (score >= 45) return 'Medio'
+  if (score >= 80) return 'Extremo'
+  if (score >= 60) return 'Alto'
+  if (score >= 40) return 'Medio'
+  if (score >= 20) return 'Moderado'
   return 'Bajo'
 })
 
 const selectedRiskClass = computed(() => {
   const score = selectedSegment.value?.risk_score ?? 0
-  if (score >= 75) return 'badge-error'
-  if (score >= 45) return 'badge-warning'
+  if (score >= 80) return 'badge-secondary'
+  if (score >= 60) return 'badge-error'
+  if (score >= 40) return 'badge-warning'
+  if (score >= 20) return 'badge-warning badge-outline'
   return 'badge-success'
 })
 
@@ -118,8 +122,10 @@ const selectedSegmentMeaning = computed(() => {
   if (!segment) return ''
 
   const notes: string[] = []
-  if (segment.risk_score >= 75) notes.push('tramo crítico: conviene bajar el ritmo')
-  else if (segment.risk_score >= 45) notes.push('tramo de atención: puede cansar más de lo normal')
+  if (segment.risk_score >= 80) notes.push('tramo de peligro extremo: no continuar sin preparación')
+  else if (segment.risk_score >= 60) notes.push('tramo crítico: conviene bajar el ritmo')
+  else if (segment.risk_score >= 40) notes.push('tramo de atención: puede cansar más de lo normal')
+  else if (segment.risk_score >= 20) notes.push('tramo con fatiga moderada esperada')
   else notes.push('tramo relativamente cómodo')
 
   if (segment.is_eccentric_fatigue) {

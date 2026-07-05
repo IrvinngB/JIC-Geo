@@ -224,4 +224,10 @@ Para detalles específicos sobre fórmulas, optimizaciones e issues:
 * **Fórmulas Biomecánicas y Climáticas:** [Formulas.md](docs/Formulas.md)
 * **Optimizaciones y Mitigaciones PostGIS:** [mitigacion.md](docs/mitigacion.md)
 * **Plan de Implementación:** [plan.md](docs/plan.md)
+
+---
+
+## Licencia
+
+Software propietario. Todos los derechos reservados. Ver [LICENSE](LICENSE).
 * **Backlog de Issues:** [issues.md](docs/issues.md)

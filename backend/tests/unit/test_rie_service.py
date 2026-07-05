@@ -73,3 +73,139 @@ def test_route_mide_dimensions_are_bounded() -> None:
 
 def test_ccr_multiplies_correction_factors() -> None:
     assert calculate_ccr(100, [0.8, 0.5]) == 40
+
+
+# ---------------------------------------------------------------------------
+# IDR 5-level reachability tests — Tabla 3 del artículo
+# ---------------------------------------------------------------------------
+
+_DEFAULT_WEIGHTS = RiskWeights(
+    metabolic_cost=0.35,
+    velocity_degradation=0.25,
+    climate_stress=0.25,
+    terrain_friction=0.15,
+)
+
+
+def test_mild_conditions_stay_in_level_1() -> None:
+    """Flat trail, no heat, no rain → IDR < 20 (green)."""
+    score, _ = calculate_segment_risk(
+        _segment(slope_pct=0.02, wbgt=22.0, cot_j_per_kg_m=2.0, metabolic_rate_w=150.0),
+        _DEFAULT_WEIGHTS,
+    )
+    assert score < 20, f"Expected level 1 (< 20), got {score}"
+
+
+def test_moderate_slope_reaches_level_2() -> None:
+    """Moderate slope + light effort → IDR in [20, 40) (yellow)."""
+    score, _ = calculate_segment_risk(
+        _segment(slope_pct=0.15, cot_j_per_kg_m=6.0, metabolic_rate_w=350.0),
+        _DEFAULT_WEIGHTS,
+    )
+    assert 20 <= score < 40, f"Expected level 2 [20, 40), got {score}"
+
+
+def test_steep_slope_with_heat_reaches_level_3() -> None:
+    """Steep slope + moderate heat stress → IDR in [40, 60) (orange)."""
+    score, _ = calculate_segment_risk(
+        _segment(
+            slope_pct=0.30,
+            cot_j_per_kg_m=10.0,
+            metabolic_rate_w=500.0,
+            wbgt=30.0,
+            elapsed_time_min=60.0,
+            canopy_density=0.2,
+            velocity_kmh=3.0,
+        ),
+        _DEFAULT_WEIGHTS,
+    )
+    assert 40 <= score < 60, f"Expected level 3 [40, 60), got {score}"
+
+
+def test_extreme_terrain_with_heat_reaches_level_4() -> None:
+    """Very steep + high WBGT + velocity degradation → IDR in [60, 80) (red)."""
+    score, _ = calculate_segment_risk(
+        _segment(
+            slope_pct=0.40,
+            cot_j_per_kg_m=14.0,
+            metabolic_rate_w=600.0,
+            wbgt=32.0,
+            elapsed_time_min=120.0,
+            canopy_density=0.1,
+            velocity_kmh=2.0,
+            uv_index=10.0,
+        ),
+        _DEFAULT_WEIGHTS,
+    )
+    assert 60 <= score < 80, f"Expected level 4 [60, 80), got {score}"
+
+
+def test_all_components_maxed_reaches_level_5() -> None:
+    """Everything at worst case → IDR >= 80 (purple)."""
+    score, _ = calculate_segment_risk(
+        _segment(
+            slope_pct=0.50,
+            cot_j_per_kg_m=20.0,
+            metabolic_rate_w=800.0,
+            wbgt=36.0,
+            elapsed_time_min=180.0,
+            canopy_density=0.0,
+            surface_type="mud",
+            is_on_path=False,
+            velocity_kmh=0.5,
+            precip_mm=30.0,
+            uv_index=12.0,
+        ),
+        _DEFAULT_WEIGHTS,
+    )
+    assert score >= 80, f"Expected level 5 (>= 80), got {score}"
+
+
+def test_theoretical_max_approaches_100() -> None:
+    """With every component clamped at 1.0 the score should reach ~100."""
+    score, _ = calculate_segment_risk(
+        _segment(
+            slope_pct=0.60,
+            cot_j_per_kg_m=25.0,
+            metabolic_rate_w=1000.0,
+            wbgt=40.0,
+            elapsed_time_min=300.0,
+            canopy_density=0.0,
+            surface_type="mud",
+            is_on_path=False,
+            velocity_kmh=0.1,
+            precip_mm=50.0,
+            uv_index=14.0,
+        ),
+        _DEFAULT_WEIGHTS,
+    )
+    assert score >= 95, f"Expected near-max (>= 95), got {score}"
+
+
+def test_each_component_contributes_independently() -> None:
+    """Verify that increasing each risk dimension actually raises the score."""
+    baseline, _ = calculate_segment_risk(_segment(), _DEFAULT_WEIGHTS)
+
+    # High metabolic only
+    high_met, _ = calculate_segment_risk(
+        _segment(cot_j_per_kg_m=18.0, metabolic_rate_w=750.0), _DEFAULT_WEIGHTS
+    )
+    assert high_met > baseline, "Metabolic component should raise score"
+
+    # High velocity degradation only
+    high_vel, _ = calculate_segment_risk(
+        _segment(velocity_kmh=1.0), _DEFAULT_WEIGHTS
+    )
+    assert high_vel > baseline, "Velocity degradation should raise score"
+
+    # High climate only
+    high_cli, _ = calculate_segment_risk(
+        _segment(wbgt=35.0, elapsed_time_min=120.0, canopy_density=0.0), _DEFAULT_WEIGHTS
+    )
+    assert high_cli > baseline, "Climate stress should raise score"
+
+    # High terrain only
+    high_ter, _ = calculate_segment_risk(
+        _segment(slope_pct=0.45, is_on_path=False), _DEFAULT_WEIGHTS
+    )
+    assert high_ter > baseline, "Terrain friction should raise score"

@@ -128,6 +128,44 @@ function formatNumber(value: number, digits = 1): string {
             </div>
           </div>
         </div>
+
+        <div
+          v-if="props.analysis.summary.wbgt != null"
+          class="rounded-box bg-base-200 p-3 text-xs text-base-content/70"
+        >
+          <h3 class="mb-2 font-bold text-base-content">
+            Condiciones climáticas
+            <span class="badge badge-xs ml-1" :class="props.analysis.summary.climate_source === 'api' ? 'badge-success' : 'badge-info'">
+              {{ props.analysis.summary.climate_source === 'api' ? 'Tiempo real' : 'Simulado' }}
+            </span>
+          </h3>
+          <div class="space-y-2">
+            <div class="flex justify-between gap-3">
+              <span>Temperatura</span>
+              <strong>{{ formatNumber(props.analysis.summary.temperature_c ?? 0, 1) }} °C</strong>
+            </div>
+            <div class="flex justify-between gap-3">
+              <span>Humedad</span>
+              <strong>{{ formatNumber(props.analysis.summary.humidity_pct ?? 0, 0) }}%</strong>
+            </div>
+            <div class="flex justify-between gap-3">
+              <span>WBGT</span>
+              <strong :class="(props.analysis.summary.wbgt ?? 0) >= 28 ? 'text-error' : ''">
+                {{ formatNumber(props.analysis.summary.wbgt ?? 0, 1) }} °C
+              </strong>
+            </div>
+            <div class="flex justify-between gap-3">
+              <span>Precipitación</span>
+              <strong>{{ formatNumber(props.analysis.summary.precip_mm ?? 0, 1) }} mm</strong>
+            </div>
+            <div class="flex justify-between gap-3">
+              <span>Índice UV</span>
+              <strong :class="(props.analysis.summary.uv_index ?? 0) >= 8 ? 'text-warning' : ''">
+                {{ formatNumber(props.analysis.summary.uv_index ?? 0, 1) }}
+              </strong>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </section>

@@ -93,6 +93,11 @@ class BiomechanicalSummary(BaseModel):
     ccr: float
     climate_source: str
     climate_timestamp: str | None
+    temperature_c: float | None = None
+    humidity_pct: float | None = None
+    wbgt: float | None = None
+    precip_mm: float | None = None
+    uv_index: float | None = None
 
 
 class BiomechanicalRequest(BaseModel):
@@ -102,6 +107,10 @@ class BiomechanicalRequest(BaseModel):
     velocity_model: VelocityModel = VelocityModel.IRMISCHER_CLARKE
     segment_length_m: float = Field(default=settings.segment_length_m, gt=0)
     climate: ClimateOverride | None = None
+    surface_type: str | None = Field(
+        default=None,
+        description="Override surface type for all segments. When set, replaces the DB default.",
+    )
 
 
 class BiomechanicalResponse(BaseModel):
@@ -379,7 +388,7 @@ async def _analyze_route(
         length_m = seg.length_m or 0.0
         length_km = length_m / 1000.0
 
-        surface_type = seg.surface_type or "dirt"
+        surface_type = payload.surface_type if payload.surface_type else (seg.surface_type or "dirt")
         eta = terrain_eta(surface_type)
         is_on_path = is_on_path_surface(surface_type)
 
@@ -573,6 +582,11 @@ async def _analyze_route(
         ccr=route_risk.ccr,
         climate_source=climate.source,
         climate_timestamp=climate.timestamp.isoformat() if climate.timestamp else None,
+        temperature_c=climate.temperature_c,
+        humidity_pct=climate.humidity_pct,
+        wbgt=climate.wbgt,
+        precip_mm=climate.precip_mm,
+        uv_index=climate.uv_index,
     )
 
     return BiomechanicalResponse(

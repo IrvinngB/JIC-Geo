@@ -29,6 +29,11 @@ export interface RouteSummary {
   mide_dimensions: MideDimensions;
   climate_source: "pending" | "api" | "simulation";
   climate_timestamp: string | null;
+  temperature_c: number | null;
+  humidity_pct: number | null;
+  wbgt: number | null;
+  precip_mm: number | null;
+  uv_index: number | null;
 }
 
 export interface ClimateFactors {
@@ -110,6 +115,11 @@ interface BiomechanicalResponse {
     ccr: number;
     climate_source: "api" | "simulation";
     climate_timestamp: string | null;
+    temperature_c: number | null;
+    humidity_pct: number | null;
+    wbgt: number | null;
+    precip_mm: number | null;
+    uv_index: number | null;
   };
   segments: Array<{
     seq: number;
@@ -327,6 +337,11 @@ export const useRouteStore = defineStore("route", () => {
           mide_dimensions: biomechanical.summary.mide_dimensions,
           climate_source: biomechanical.summary.climate_source,
           climate_timestamp: biomechanical.summary.climate_timestamp,
+          temperature_c: biomechanical.summary.temperature_c,
+          humidity_pct: biomechanical.summary.humidity_pct,
+          wbgt: biomechanical.summary.wbgt,
+          precip_mm: biomechanical.summary.precip_mm,
+          uv_index: biomechanical.summary.uv_index,
         },
         segments: biomechanical.segments.map((segment) =>
           mapBackendSegment(segment, interpolatedBySeq),
@@ -378,7 +393,7 @@ export const useRouteStore = defineStore("route", () => {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profile, velocity_model: "irmischer_clarke" }),
+        body: JSON.stringify({ profile, velocity_model: "irmischer_clarke", surface_type: profile.surface_type }),
       },
     );
 
@@ -445,6 +460,11 @@ export const useRouteStore = defineStore("route", () => {
           mide_dimensions: simulated.summary.mide_dimensions,
           climate_source: simulated.summary.climate_source,
           climate_timestamp: simulated.summary.climate_timestamp,
+          temperature_c: simulated.summary.temperature_c,
+          humidity_pct: simulated.summary.humidity_pct,
+          wbgt: simulated.summary.wbgt,
+          precip_mm: simulated.summary.precip_mm,
+          uv_index: simulated.summary.uv_index,
         },
         segments: simulated.segments.map((segment) => mapBackendSegment(segment)),
       };
@@ -470,6 +490,7 @@ export const useRouteStore = defineStore("route", () => {
           weight_kg: 70,
           load_kg: 10,
           fitness_level: "medium",
+          surface_type: "dirt",
         },
       );
       analysis.value = {
