@@ -226,7 +226,7 @@ async function applyScenario(scenario: SimulationScenario): Promise<void> {
           <span>{{ error }}</span>
         </div>
 
-        <RouteSummary :analysis="analysis" />
+        <RouteSummary :analysis="analysis" :profile="profile" />
 
         <MideIndicator
           v-if="analysis"

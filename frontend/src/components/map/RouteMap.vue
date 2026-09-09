@@ -165,6 +165,7 @@ watch(
 function buildMapStyle(baseMap: BaseMapOption): StyleSpecification {
   return {
     version: 8,
+    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
     sources: {
       'base-raster': {
         type: 'raster',

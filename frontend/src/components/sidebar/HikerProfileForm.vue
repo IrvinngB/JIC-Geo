@@ -22,6 +22,17 @@ const props = defineProps<{
       </div>
 
       <label class="form-control">
+        <span class="label-text text-xs font-medium">Nombre <span class="text-base-content/40 font-normal">(opcional)</span></span>
+        <input
+          v-model="profile.name"
+          type="text"
+          placeholder="Ej. Juan Pérez"
+          class="input input-bordered input-sm"
+          :disabled="props.disabled"
+        />
+      </label>
+
+      <label class="form-control">
         <span class="label-text text-xs font-medium">Peso corporal (kg)</span>
         <input
           v-model.number="profile.weight_kg"

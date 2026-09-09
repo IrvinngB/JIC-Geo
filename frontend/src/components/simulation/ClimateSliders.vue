@@ -4,6 +4,7 @@ import type {
   ClimateOverride,
   SimulationScenario,
 } from '@/stores/routeStore'
+import { formatDurationHours } from '@/utils/formatters'
 
 const props = defineProps<{
   modelValue: ClimateOverride
@@ -106,9 +107,9 @@ function formatNumber(value: number, digits = 0): string {
         <span>{{ props.comparison.real.mide_global }}</span>
         <span class="font-semibold">{{ props.comparison.simulated.mide_global }}</span>
 
-        <span class="text-left text-base-content/50">Tiempo (h)</span>
-        <span>{{ formatNumber(props.comparison.real.estimated_time_h, 1) }}</span>
-        <span class="font-semibold">{{ formatNumber(props.comparison.simulated.estimated_time_h, 1) }}</span>
+        <span class="text-left text-base-content/50">Tiempo</span>
+        <span>{{ formatDurationHours(props.comparison.real.estimated_time_h) }}</span>
+        <span class="font-semibold">{{ formatDurationHours(props.comparison.simulated.estimated_time_h) }}</span>
 
         <span class="text-left text-base-content/50">kcal</span>
         <span>{{ formatNumber(props.comparison.real.total_kcal) }}</span>

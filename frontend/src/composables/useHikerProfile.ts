@@ -10,6 +10,7 @@ export type FitnessLevel = 'low' | 'medium' | 'high' | 'athlete'
 export type SurfaceType = 'dirt' | 'paved' | 'gravel' | 'mud' | 'sand' | 'scrub' | 'dense_scrub'
 
 export interface HikerProfile {
+  name?: string
   weight_kg: number
   load_kg: number
   fitness_level: FitnessLevel
@@ -18,6 +19,7 @@ export interface HikerProfile {
 
 export function useHikerProfile() {
   const profile = reactive<HikerProfile>({
+    name: '',
     weight_kg: 70,
     load_kg: 10,
     fitness_level: 'medium',

@@ -1,9 +1,16 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, nextTick } from 'vue'
+import { createApp } from 'vue'
 import type { RouteAnalysis } from '@/stores/routeStore'
+import type { HikerProfile } from '@/composables/useHikerProfile'
+import RouteReportTemplate from '@/components/report/RouteReportTemplate.vue'
+import AppIcon from '@/components/icons/AppIcon.vue'
+import { exportElementAsPdf, buildReportFilename } from '@/utils/pdfExport'
+import { formatNumber, formatDurationHours } from '@/utils/formatters'
 
 const props = defineProps<{
   analysis: RouteAnalysis | null
+  profile?: HikerProfile
 }>()
 
 const effortLabel = computed(() => {
@@ -27,7 +34,16 @@ const routeInterpretation = computed(() => {
 
   const summary = props.analysis.summary
   const fatigueH = summary.time_to_severe_fatigue_h
-  const fatigueText = fatigueH == null ? '' : ` La fatiga fuerte podría aparecer alrededor de ${formatNumber(fatigueH, 1)} h.`
+  const estimatedH = summary.estimated_time_h
+
+  let fatigueText = ''
+  if (fatigueH != null) {
+    if (fatigueH <= estimatedH) {
+      fatigueText = ` Atención: la fatiga fuerte podría aparecer a los ${formatDurationHours(fatigueH)}, antes de terminar el recorrido.`
+    } else {
+      fatigueText = ` Margen adecuado: la ruta concluye antes de alcanzar fatiga severa (autonomía estimada: ${formatDurationHours(fatigueH)}).`
+    }
+  }
 
   if (summary.mide_global <= 2) {
     return `Ruta manejable para la mayoría de personas con condición física acorde.${fatigueText}`
@@ -45,11 +61,59 @@ const correctedPointsLabel = computed(() => {
   return 'Hubo varias correcciones de elevación; revisar la calidad del GPX/DEM.'
 })
 
-function formatNumber(value: number, digits = 1): string {
-  return value.toLocaleString('es-MX', {
-    maximumFractionDigits: digits,
-    minimumFractionDigits: digits,
-  })
+// ── PDF Export ────────────────────────────────────────────────────────────────
+
+const isExporting = ref(false)
+
+async function downloadPdf(): Promise<void> {
+  if (!props.analysis || isExporting.value) return
+
+  isExporting.value = true
+
+  try {
+    // Mount inside an isolated iframe so DaisyUI oklch stylesheets are never inherited
+    const iframe = document.createElement('iframe')
+    iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;height:1123px;border:none;opacity:0;pointer-events:none;'
+    document.body.appendChild(iframe)
+
+    const doc = iframe.contentDocument || iframe.contentWindow?.document
+    if (!doc) throw new Error('Could not access iframe document')
+
+    doc.open()
+    doc.write('<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#ffffff;"><div id="report-root"></div></body></html>')
+    doc.close()
+
+    const mountEl = doc.getElementById('report-root')!
+
+    const app = createApp(RouteReportTemplate, {
+      analysis: props.analysis,
+      profile: props.profile ?? {
+        weight_kg: 70,
+        load_kg: 10,
+        fitness_level: 'medium' as const,
+        surface_type: 'dirt' as const,
+      },
+      generatedAt: new Date(),
+      hikerName: props.profile?.name?.trim() || undefined,
+    })
+
+    app.mount(mountEl)
+
+    await nextTick()
+    await new Promise((r) => setTimeout(r, 250))
+
+    const target = (mountEl.firstElementChild ?? mountEl) as HTMLElement
+    const filename = buildReportFilename(props.analysis.route_name, props.analysis.route_id)
+
+    await exportElementAsPdf(target, filename)
+
+    app.unmount()
+    document.body.removeChild(iframe)
+  } catch (err) {
+    console.error('Error exporting PDF report:', err)
+  } finally {
+    isExporting.value = false
+  }
 }
 </script>
 
@@ -57,7 +121,7 @@ function formatNumber(value: number, digits = 1): string {
   <section class="card bg-base-100 shadow-md">
     <div class="card-body p-4">
       <div class="flex items-start justify-between gap-3">
-        <div>
+      <div>
           <h2 class="card-title text-sm font-semibold uppercase tracking-wider text-base-content/60">
             Resumen
           </h2>
@@ -91,7 +155,7 @@ function formatNumber(value: number, digits = 1): string {
           </div>
           <div class="rounded-box bg-base-200 p-3">
             <div class="text-xs text-base-content/50">Tiempo estimado</div>
-            <div class="text-xl font-extrabold">{{ formatNumber(props.analysis.summary.estimated_time_h, 2) }} h</div>
+            <div class="text-xl font-extrabold">{{ formatDurationHours(props.analysis.summary.estimated_time_h) }}</div>
             <p class="mt-1 text-xs text-base-content/50">Sin clima ni pausas largas.</p>
           </div>
           <div class="rounded-box bg-base-200 p-3">
@@ -166,6 +230,18 @@ function formatNumber(value: number, digits = 1): string {
             </div>
           </div>
         </div>
+        <!-- PDF Download button -->
+        <button
+          type="button"
+          class="btn btn-sm btn-outline btn-success w-full gap-2"
+          :disabled="isExporting"
+          :class="{ 'opacity-60 cursor-not-allowed': isExporting }"
+          @click="downloadPdf"
+        >
+          <span v-if="isExporting" class="loading loading-spinner loading-xs" />
+          <AppIcon v-else name="download" :size="15" />
+          {{ isExporting ? 'Generando informe...' : 'Descargar Informe PDF' }}
+        </button>
       </div>
     </div>
   </section>
