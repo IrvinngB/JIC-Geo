@@ -4,13 +4,19 @@ import { createApp } from 'vue'
 import type { RouteAnalysis } from '@/stores/routeStore'
 import type { HikerProfile } from '@/composables/useHikerProfile'
 import RouteReportTemplate from '@/components/report/RouteReportTemplate.vue'
+import RouteMap from '@/components/map/RouteMap.vue'
 import AppIcon from '@/components/icons/AppIcon.vue'
 import { exportElementAsPdf, buildReportFilename } from '@/utils/pdfExport'
 import { formatNumber, formatDurationHours } from '@/utils/formatters'
 
+interface RouteMapInstance {
+  captureImage: () => string | null
+}
+
 const props = defineProps<{
   analysis: RouteAnalysis | null
   profile?: HikerProfile
+  routeMap?: RouteMapInstance | null
 }>()
 
 const effortLabel = computed(() => {
@@ -85,6 +91,8 @@ async function downloadPdf(): Promise<void> {
 
     const mountEl = doc.getElementById('report-root')!
 
+    const mapImageBase64 = props.routeMap?.captureImage() ?? undefined
+
     const app = createApp(RouteReportTemplate, {
       analysis: props.analysis,
       profile: props.profile ?? {
@@ -95,6 +103,7 @@ async function downloadPdf(): Promise<void> {
       },
       generatedAt: new Date(),
       hikerName: props.profile?.name?.trim() || undefined,
+      mapImageBase64,
     })
 
     app.mount(mountEl)

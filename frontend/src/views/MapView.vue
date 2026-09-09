@@ -19,6 +19,12 @@ import { useRouteStore } from '@/stores/routeStore'
 import type { ClimateOverride, SimulationScenario } from '@/stores/routeStore'
 import type { HikerProfile } from '@/composables/useHikerProfile'
 
+interface RouteMapInstance {
+  captureImage: () => string | null
+}
+
+const routeMapRef = ref<RouteMapInstance | null>(null)
+
 const { currentTheme, toggleTheme } = useTheme()
 const { profile, isValid } = useHikerProfile()
 const simulation = useSimulation()
@@ -226,7 +232,7 @@ async function applyScenario(scenario: SimulationScenario): Promise<void> {
           <span>{{ error }}</span>
         </div>
 
-        <RouteSummary :analysis="analysis" :profile="profile" />
+        <RouteSummary :analysis="analysis" :profile="profile" :route-map="routeMapRef" />
 
         <MideIndicator
           v-if="analysis"
@@ -322,6 +328,7 @@ async function applyScenario(scenario: SimulationScenario): Promise<void> {
 
     <main class="absolute inset-0 md:static md:min-h-0 md:flex-1">
       <RouteMap
+        ref="routeMapRef"
         :analysis="analysis"
         :selected-seq="selectedSegment?.seq ?? null"
         :graph="routeGraph"

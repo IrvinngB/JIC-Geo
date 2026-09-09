@@ -27,6 +27,7 @@ const props = defineProps<{
   profile: HikerProfile
   generatedAt: Date
   hikerName?: string
+  mapImageBase64?: string
 }>()
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -457,7 +458,7 @@ const cleanRouteName = computed(() =>
       }"
     >
       <!-- Appendix header -->
-      <div :style="{ background: DS.fg, borderRadius: '14px', padding: '16px 22px', display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center' }">
+      <div :style="{ background: DS.fg, borderRadius: '14px', padding: '16px 22px', display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', flexShrink: '0' }">
         <div>
           <div :style="{ fontSize: '12px', fontWeight: '700', color: '#FFFFFF' }">Apéndice Técnico</div>
           <div :style="{ fontSize: '8.5px', color: 'rgba(255,255,255,0.45)', marginTop: '2px' }">
@@ -470,7 +471,7 @@ const cleanRouteName = computed(() =>
       </div>
 
       <!-- MIDE DIMENSIONS -->
-      <div :style="{ background: DS.surface, border: '1px solid ' + DS.border, borderRadius: '14px', padding: '18px 22px' }">
+      <div :style="{ background: DS.surface, border: '1px solid ' + DS.border, borderRadius: '14px', padding: '18px 22px', flexShrink: '0' }">
         <div :style="{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }">
           <div :style="{ fontSize: '11px', fontWeight: '700', color: DS.fg }">
             Diagnóstico MIDE — Escala de Dificultad de Montaña
@@ -505,7 +506,7 @@ const cleanRouteName = computed(() =>
 
       <!-- TECHNICAL DATA — same fix as page 1: stretch to match each
            other, size to content, don't force-fill the page. -->
-      <div :style="{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', alignItems: 'stretch' }">
+      <div :style="{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', alignItems: 'stretch', flexShrink: '0' }">
         <div :style="{ background: DS.surface, border: '1px solid ' + DS.border, borderRadius: '14px', padding: '18px 20px', display: 'flex', flexDirection: 'column' }">
           <div :style="{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }">
             <div
@@ -597,7 +598,7 @@ const cleanRouteName = computed(() =>
       </div>
 
       <!-- HIKER PROFILE TECHNICAL -->
-      <div :style="{ background: DS.surface, border: '1px solid ' + DS.border, borderRadius: '14px', padding: '16px 22px', display: 'grid', gridTemplateColumns: 'auto 1fr', alignItems: 'center' }">
+      <div :style="{ background: DS.surface, border: '1px solid ' + DS.border, borderRadius: '14px', padding: '16px 22px', display: 'grid', gridTemplateColumns: 'auto 1fr', alignItems: 'center', flexShrink: '0' }">
         <div :style="{ fontSize: '9px', letterSpacing: '0.08em', textTransform: 'uppercase', color: DS.fgMuted }">
           Perfil del senderista
         </div>
@@ -616,6 +617,28 @@ const cleanRouteName = computed(() =>
             <div :style="{ fontSize: '10.5px', fontWeight: '700', color: DS.fg }">{{ item.value }}</div>
           </div>
         </div>
+      </div>
+
+
+      <!-- MAP SNAPSHOT — only shown when a capture is available -->
+      <div
+        v-if="mapImageBase64"
+        :style="{
+          background: DS.surface, border: '1px solid ' + DS.border,
+          borderRadius: '14px', overflow: 'hidden',
+          flexGrow: '1', minHeight: '0',
+          display: 'flex', flexDirection: 'column',
+        }"
+      >
+        <div :style="{ padding: '10px 18px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: '0' }">
+          <span :style="{ fontSize: '9px', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase', color: DS.fgMuted }">Vista de la ruta</span>
+          <span :style="{ fontSize: '8px', color: DS.fgMuted, fontStyle: 'italic' }">© OpenStreetMap contributors</span>
+        </div>
+        <img
+          :src="mapImageBase64"
+          :style="{ width: '100%', height: '0', minHeight: '100%', objectFit: 'cover', objectPosition: 'center', display: 'block', flexShrink: '1' }"
+          alt="Captura de la ruta en el mapa"
+        />
       </div>
 
       <!-- FOOTER PAGE 2 — pinned to the bottom of the fixed-height page -->

@@ -88,6 +88,7 @@ onMounted(() => {
     pitch: terrainEnabled.value ? 60 : 0,
     bearing: terrainEnabled.value ? -25 : 0,
     style: buildMapStyle(currentBaseMap.value),
+    preserveDrawingBuffer: true,
   })
 
   map.on('load', () => {
@@ -109,6 +110,18 @@ onBeforeUnmount(() => {
   map?.remove()
   map = null
 })
+
+/** Captures the current map view as a PNG base64 data URL. */
+function captureImage(): string | null {
+  if (!map) return null
+  try {
+    return map.getCanvas().toDataURL('image/png')
+  } catch {
+    return null
+  }
+}
+
+defineExpose({ captureImage })
 
 watch(
   () => props.analysis,
