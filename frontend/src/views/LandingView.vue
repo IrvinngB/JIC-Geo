@@ -330,7 +330,6 @@ const authors = [
           <span>· Índice dinámico de riesgo en senderismo</span>
         </div>
         <div class="flex items-center gap-4">
-          <a href="https://github.com/IrvinngB/JIC-Geo" target="_blank" class="link link-hover">GitHub</a>
           <RouterLink to="/mapa" class="link link-hover text-primary">Abrir la app</RouterLink>
         </div>
       </div>
