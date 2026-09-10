@@ -125,11 +125,22 @@ onBeforeUnmount(() => {
   map = null
 })
 
-/** Captures the current map view as a JPEG base64 data URL. */
+/** Captures the current map view as a compressed JPEG data URL. */
 function captureImage(): string | null {
   if (!map) return null
   try {
-    return map.getCanvas().toDataURL('image/jpeg', 0.85)
+    const src = map.getCanvas()
+    // Limit capture size to reduce PDF weight
+    const maxW = 1200
+    const scale = Math.min(1, maxW / src.width)
+    if (scale >= 1) return src.toDataURL('image/jpeg', 0.6)
+    const tmp = document.createElement('canvas')
+    tmp.width = Math.round(src.width * scale)
+    tmp.height = Math.round(src.height * scale)
+    const ctx = tmp.getContext('2d')
+    if (!ctx) return src.toDataURL('image/jpeg', 0.6)
+    ctx.drawImage(src, 0, 0, tmp.width, tmp.height)
+    return tmp.toDataURL('image/jpeg', 0.6)
   } catch {
     return null
   }

@@ -17,7 +17,7 @@ const A4_H_MM = 297
  */
 export async function exportElementAsPdf(element: HTMLElement, filename: string): Promise<void> {
   const canvas = await html2canvas(element, {
-    scale: 2,
+    scale: 1.5,
     useCORS: true,
     backgroundColor: '#ffffff',
     logging: false,
@@ -36,6 +36,11 @@ export async function exportElementAsPdf(element: HTMLElement, filename: string)
   const imgData = canvas.toDataURL('image/png')
   const imgW = canvas.width
   const imgH = canvas.height
+
+  // If the canvas is very tall (multi-page report), compress to JPEG to reduce size
+  const isLarge = imgH > 2000
+  const finalImgData = isLarge ? canvas.toDataURL('image/jpeg', 0.6) : imgData
+  const finalType = isLarge ? 'JPEG' : 'PNG'
 
   // Calculate how many mm tall the image is at A4 width.
   const pdfImgH_MM = (imgH * A4_W_MM) / imgW
@@ -67,10 +72,12 @@ export async function exportElementAsPdf(element: HTMLElement, filename: string)
     sliceCanvas.height = Math.ceil(slicePixelH)
 
     const ctx = sliceCanvas.getContext('2d')!
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height)
     ctx.drawImage(canvas, 0, srcY, imgW, slicePixelH, 0, 0, imgW, slicePixelH)
 
-    const sliceData = sliceCanvas.toDataURL('image/png')
-    pdf.addImage(sliceData, 'PNG', 0, 0, A4_W_MM, sliceH)
+    const sliceData = sliceCanvas.toDataURL('image/jpeg', 0.7)
+    pdf.addImage(sliceData, 'JPEG', 0, 0, A4_W_MM, sliceH, undefined, 'FAST')
 
     remainingH -= sliceH
     positionInImg += sliceH
