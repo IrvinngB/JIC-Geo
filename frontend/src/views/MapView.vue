@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import RouteMap from '@/components/map/RouteMap.vue'
 import HikerProfileForm from '@/components/sidebar/HikerProfileForm.vue'
@@ -15,6 +15,7 @@ import { useHikerProfile } from '@/composables/useHikerProfile'
 import { useSimulation } from '@/composables/useSimulation'
 import { useRoutePlanner } from '@/composables/useRoutePlanner'
 import { useTheme } from '@/composables/useTheme'
+import { useAuthStore } from '@/stores/authStore'
 import { useRouteStore } from '@/stores/routeStore'
 import type { ClimateOverride, SimulationScenario } from '@/stores/routeStore'
 import type { HikerProfile } from '@/composables/useHikerProfile'
@@ -26,6 +27,8 @@ interface RouteMapInstance {
 const routeMapRef = ref<RouteMapInstance | null>(null)
 
 const { currentTheme, toggleTheme } = useTheme()
+const auth = useAuthStore()
+const router = useRouter()
 const { profile, isValid } = useHikerProfile()
 const simulation = useSimulation()
 const routeStore = useRouteStore()
@@ -59,6 +62,11 @@ async function toggleRouting(): Promise<void> {
   } else {
     await routePlanner.activate()
   }
+}
+
+function handleLogout() {
+  auth.logout()
+  router.push('/')
 }
 
 // On mobile the side panel becomes a bottom sheet. This drives its open state;
@@ -215,6 +223,14 @@ async function applyScenario(scenario: SimulationScenario): Promise<void> {
             @click="toggleTheme"
           >
             <AppIcon :name="currentTheme === 'jic-dark' ? 'sun' : 'moon'" :size="18" />
+          </button>
+          <button
+            v-if="auth.isAuthenticated"
+            class="btn btn-ghost btn-sm text-[10px] text-base-content/50 sm:text-xs"
+            title="Cerrar sesión"
+            @click="handleLogout"
+          >
+            Salir
           </button>
           <div class="badge badge-success badge-outline text-[10px] sm:text-xs">FE alpha</div>
         </div>

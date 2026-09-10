@@ -1,9 +1,17 @@
 <script setup lang="ts">
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { useTheme } from '@/composables/useTheme'
+import { useAuthStore } from '@/stores/authStore'
 import AppIcon, { type IconName } from '@/components/icons/AppIcon.vue'
 
 const { currentTheme, toggleTheme } = useTheme()
+const auth = useAuthStore()
+const router = useRouter()
+
+function handleLogout() {
+  auth.logout()
+  router.push('/')
+}
 
 const painPoints = [
   { icon: 'map' as IconName, title: 'Mapas estáticos', text: 'Solo muestran distancia y elevación, ignorando el estado del terreno.' },
@@ -102,13 +110,22 @@ const authors = [
           <button class="btn btn-ghost btn-circle btn-sm text-base-content/60 hover:text-base-content" title="Cambiar tema" @click="toggleTheme">
             <AppIcon :name="currentTheme === 'jic-dark' ? 'sun' : 'moon'" :size="18" />
           </button>
-          <RouterLink to="/mapa" class="btn btn-primary btn-sm text-white">Abrir app</RouterLink>
+          <template v-if="auth.isAuthenticated">
+            <span class="text-xs text-base-content/50">{{ auth.user?.name }}</span>
+            <RouterLink to="/mapa" class="btn btn-primary btn-sm text-white">Abrir app</RouterLink>
+            <button class="btn btn-ghost btn-sm text-base-content/50" @click="handleLogout">Salir</button>
+          </template>
+          <template v-else>
+            <RouterLink to="/login" class="btn btn-ghost btn-sm text-base-content/60">Iniciar sesión</RouterLink>
+            <RouterLink to="/register" class="btn btn-primary btn-sm text-white">Registrarse</RouterLink>
+          </template>
         </div>
         <div class="flex items-center gap-2 sm:hidden">
           <button class="btn btn-ghost btn-circle btn-sm text-base-content/60 hover:text-base-content" title="Cambiar tema" @click="toggleTheme">
             <AppIcon :name="currentTheme === 'jic-dark' ? 'sun' : 'moon'" :size="18" />
           </button>
-          <RouterLink to="/mapa" class="btn btn-primary btn-sm text-white">Abrir app</RouterLink>
+          <RouterLink v-if="auth.isAuthenticated" to="/mapa" class="btn btn-primary btn-sm text-white">Abrir app</RouterLink>
+          <RouterLink v-else to="/login" class="btn btn-primary btn-sm text-white">Iniciar sesión</RouterLink>
         </div>
       </nav>
     </header>

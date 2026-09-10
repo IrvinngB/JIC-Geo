@@ -10,6 +10,11 @@ class Settings(BaseSettings):
     # Environment
     environment: str = "development"
 
+    # Auth / JWT
+    secret_key: str = "risktrail-dev-secret-change-in-production"
+    algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60 * 24 * 7  # 7 days
+
     # Climate API
     climate_api_ttl_seconds: int = 600  # CLI-07: default 10 minutes
 

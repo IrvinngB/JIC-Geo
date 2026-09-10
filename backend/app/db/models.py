@@ -28,6 +28,28 @@ class Base(DeclarativeBase):
 
 
 # ---------------------------------------------------------------------------
+# AUTH — Users
+# ---------------------------------------------------------------------------
+
+
+class User(Base):
+    """Registered user account."""
+
+    __tablename__ = "users"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    profiles: Mapped[list["Profile"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+
+
+# ---------------------------------------------------------------------------
 # DAT — Spatial Data
 # ---------------------------------------------------------------------------
 
@@ -151,3 +173,29 @@ class Edge(Base):
     surface_type: Mapped[str | None] = mapped_column(String(20))
     canopy_density: Mapped[float | None] = mapped_column(Float)
     slope_pct: Mapped[float | None] = mapped_column(Float)
+
+
+# ---------------------------------------------------------------------------
+# PRF — Hiker Profiles
+# ---------------------------------------------------------------------------
+
+
+class Profile(Base):
+    """Hiker profile — stores physical attributes for biomechanical calculations."""
+
+    __tablename__ = "profiles"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    weight_kg: Mapped[float] = mapped_column(Float, nullable=False)
+    load_kg: Mapped[float] = mapped_column(Float, default=0)
+    fitness_level: Mapped[str] = mapped_column(String(20), default="medium")  # low|medium|high|athlete
+    surface_type: Mapped[str] = mapped_column(String(20), default="dirt")
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    user: Mapped["User"] = relationship(back_populates="profiles")
