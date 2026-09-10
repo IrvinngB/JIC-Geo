@@ -4,11 +4,15 @@ from app.api.v1.endpoints import analysis, health, climate
 from app.modules.auth.router import router as auth_router
 from app.modules.dat.router import dem_router, router as dat_router
 from app.modules.grf.router import router as grf_router
+from app.modules.his.router import router as history_router
+from app.modules.prf.user_router import router as profile_router
 from app.modules.rut.router import router as rut_router
 
 api_router = APIRouter()
 
 api_router.include_router(auth_router, prefix="/auth", tags=["Auth"])
+api_router.include_router(profile_router, prefix="/profiles", tags=["Profiles"])
+api_router.include_router(history_router, prefix="/history", tags=["History"])
 api_router.include_router(health.router, tags=["System"])
 api_router.include_router(dat_router, prefix="/routes", tags=["Routes"])
 api_router.include_router(rut_router, prefix="/routes", tags=["Routes"])
