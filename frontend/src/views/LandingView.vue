@@ -62,6 +62,7 @@ const authors = [
     github: 'https://github.com/IrvinngB',
     githubUser: 'IrvinngB',
     portfolio: 'https://irvincodes.dev/',
+    linkedin: 'https://www.linkedin.com/in/irvin-benitez-11313231b',
     avatar: 'https://avatars.githubusercontent.com/u/157191495',
   },
   {
@@ -70,6 +71,7 @@ const authors = [
     github: 'https://github.com/kelvinhe04',
     githubUser: 'kelvinhe04',
     portfolio: 'https://kelvin-he.netlify.app/',
+    linkedin: 'https://www.linkedin.com/in/kelvin-he-wu/?locale=es',
     avatar: 'https://avatars.githubusercontent.com/u/91310516',
   },
   {
@@ -77,6 +79,7 @@ const authors = [
     role: 'Backend & Database',
     github: 'https://github.com/Roy-x24',
     githubUser: 'Roy-x24',
+    linkedin: 'https://www.linkedin.com/in/roy-barrera-0077b1340/',
     avatar: 'https://ui-avatars.com/api/?name=Roy+Barrera&background=random',
   },
 ]
@@ -298,6 +301,10 @@ const authors = [
             <a v-if="author.portfolio" :href="author.portfolio" target="_blank" class="mt-1 inline-flex items-center gap-1.5 text-xs text-base-content/40 hover:text-primary hover:underline">
               <AppIcon name="globe" :size="12" />
               Portfolio
+            </a>
+            <a v-if="author.linkedin" :href="author.linkedin" target="_blank" class="mt-1 inline-flex items-center gap-1.5 text-xs text-base-content/40 hover:text-primary hover:underline">
+              <AppIcon name="linkedin" :size="12" />
+              LinkedIn
             </a>
           </div>
         </div>
