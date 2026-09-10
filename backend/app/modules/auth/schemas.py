@@ -28,3 +28,12 @@ class UserResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @classmethod
+    def from_user(cls, user: "User") -> "UserResponse":
+        return cls(
+            id=str(user.id),
+            email=user.email,
+            name=user.name,
+            created_at=user.created_at,
+        )

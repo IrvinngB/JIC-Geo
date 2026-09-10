@@ -62,7 +62,8 @@ export const useAuthStore = defineStore('auth', () => {
       }
       const data = await res.json()
       setToken(data.access_token)
-      await fetchUser()
+      // Fetch user in background — don't block or throw on failure
+      fetchUser().catch(() => {})
     } catch (e: any) {
       error.value = e.message
       throw e
@@ -86,7 +87,8 @@ export const useAuthStore = defineStore('auth', () => {
       }
       const data = await res.json()
       setToken(data.access_token)
-      await fetchUser()
+      // Fetch user in background — don't block or throw on failure
+      fetchUser().catch(() => {})
     } catch (e: any) {
       error.value = e.message
       throw e

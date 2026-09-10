@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <style>
+        @page {
+            size: A4;
+            margin: 0;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html,
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background: #F4F6F1;
+            color: #16241B;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        .page {
+            width: 210mm;
+            min-height: 297mm;
+            padding: 10mm 10mm;
+            background: #F4F6F1;
+        }
+
+        /* ---------- shared card ---------- */
+        .panel {
+            background: #FFFFFF;
+            border: 1px solid #E1E6DC;
+            border-radius: 5mm;
+            padding: 5mm 6mm;
+            margin-bottom: 4mm;
+        }
+
+        /* ---------- header ---------- */
+        .header-panel {
+            display: table;
+            width: 100%;
+        }
+
+        .header-icon {
+            display: table-cell;
+            width: 14mm;
+            vertical-align: middle;
+        }
+
+        .icon-circle {
+            width: 11mm;
+            height: 11mm;
+            border-radius: 50%;
+            background: #EAF2C9;
+            border: 1px solid #C9D98A;
+            text-align: center;
+            line-height: 11mm;
+            font-size: 14px;
+            color: #6E8A1E;
+        }
+
+        .header-title {
+            display: table-cell;
+            vertical-align: middle;
+            width: 46%;
+        }
+
+        .header-title h1 {
+            font-size: 15px;
+            font-weight: 700;
+            line-height: 1.3;
+        }
+
+        .header-title .brand {
+            color: #6E8A1E;
+            font-weight: 800;
+        }
+
+        .header-title .sub {
+            font-size: 9px;
+            color: #6B7A6E;
+            margin-top: 1mm;
+        }
+
+        .header-date {
+            display: table-cell;
+            vertical-align: middle;
+            width: 22%;
+            font-size: 9px;
+            color: #5B6B60;
+            text-align: left;
+            padding-left: 4mm;
+        }
+
+        .header-mide {
+            display: table-cell;
+            vertical-align: middle;
+            width: 18%;
+            text-align: right;
+        }
+
+        .mide-badge {
+            display: inline-block;
+            background: #EAF2C9;
+            border: 1px solid #C9D98A;
+            border-radius: 4mm;
+            padding: 2.5mm 5mm;
+            text-align: center;
+        }
+
+        .mide-badge .label {
+            font-size: 8px;
+            letter-spacing: 0.08em;
+            color: #6E8A1E;
+            font-weight: 700;
+        }
+
+        .mide-badge .num {
+            font-size: 20px;
+            font-weight: 800;
+            color: #16241B;
+            line-height: 1.1;
+        }
+
+        .mide-badge .desc {
+            font-size: 8px;
+            color: #6E8A1E;
+            font-weight: 700;
+        }
+
+        /* ---------- perfil senderista bar ---------- */
+        .profile-bar {
+            display: table;
+            width: 100%;
+        }
+
+        .profile-label {
+            display: table-cell;
+            vertical-align: middle;
+            font-size: 9px;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: #6B7A6E;
+            width: 26%;
+        }
+
+        .profile-stats {
+            display: table-cell;
+            text-align: right;
+        }
+
+        .profile-stats .item {
+            display: inline-block;
+            margin-left: 8mm;
+            text-align: left;
+        }
+
+        .profile-stats .item .k {
+            font-size: 8.5px;
+            color: #6B7A6E;
+        }
+
+        .profile-stats .item .v {
+            font-size: 10.5px;
+            font-weight: 700;
+            color: #16241B;
+        }
+
+        /* ---------- stat cards row ---------- */
+        .stat-row {
+            display: table;
+            width: 100%;
+            table-layout: fixed;
+            border-spacing: 3mm 0;
+        }
+
+        .stat-cell {
+            display: table-cell;
+        }
+
+        .stat-card {
+            background: #FFFFFF;
+            border: 1px solid #E1E6DC;
+            border-radius: 5mm;
+            padding: 5mm 3mm;
+            text-align: center;
+        }
+
+        .stat-card .big {
+            font-size: 22px;
+            font-weight: 800;
+            color: #16241B;
+        }
+
+        .stat-card .unit {
+            font-size: 10px;
+            font-weight: 700;
+            color: #6E8A1E;
+        }
+
+        .stat-card .label {
+            font-size: 8px;
+            letter-spacing: 0.08em;
+            color: #6B7A6E;
+            text-transform: uppercase;
+            margin-top: 1mm;
+        }
+
+        .stat-card .sub {
+            font-size: 9px;
+            color: #6B7A6E;
+            margin-top: 0.5mm;
+        }
+
+        /* ---------- MIDE diagnostic ---------- */
+        .mide-title-row {
+            display: table;
+            width: 100%;
+            margin-bottom: 3.5mm;
+        }
+
+        .mide-title-cell {
+            display: table-cell;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .mide-level-pill {
+            display: table-cell;
+            text-align: right;
+        }
+
+        .pill-outline {
+            display: inline-block;
+            font-size: 9px;
+            font-weight: 700;
+            color: #6E8A1E;
+            border: 1px solid #C9D98A;
+            background: #F5F9E9;
+            border-radius: 9999px;
+            padding: 1.5mm 4mm;
+        }
+
+        .mide-grid {
+            display: table;
+            width: 100%;
+            table-layout: fixed;
+            border-spacing: 3mm 0;
+        }
+
+        .mide-cell {
+            display: table-cell;
+        }
+
+        .mide-box {
+            background: #FBFCFA;
+            border: 1px solid #E1E6DC;
+            border-radius: 4mm;
+            padding: 3.5mm 3mm;
+            text-align: center;
+        }
+
+        .mide-box .score {
+            font-size: 20px;
+            font-weight: 800;
+            color: #16241B;
+        }
+
+        .mide-box .score .of5 {
+            font-size: 11px;
+            font-weight: 400;
+            color: #6B7A6E;
+        }
+
+        .mide-bar {
+            height: 2px;
+            background: #E1E6DC;
+            margin: 2mm auto 2mm;
+            width: 70%;
+            position: relative;
+        }
+
+        .mide-bar .fill {
+            height: 2px;
+            background: #A9C93E;
+        }
+
+        .mide-box .name {
+            font-size: 8.5px;
+            color: #6B7A6E;
+            line-height: 1.3;
+        }
+
+        .callout {
+            display: table;
+            width: 100%;
+            background: #F5F9E9;
+            border: 1px solid #C9D98A;
+            border-radius: 4mm;
+            padding: 3mm 4mm;
+            margin-top: 3.5mm;
+        }
+
+        .callout .check {
+            display: table-cell;
+            width: 6mm;
+            color: #6E8A1E;
+            font-weight: 800;
+            vertical-align: middle;
+        }
+
+        .callout .text {
+            display: table-cell;
+            vertical-align: middle;
+            font-size: 9.5px;
+            color: #2E3A2E;
+        }
+
+        .callout .text b {
+            color: #16241B;
+        }
+
+        /* ---------- two column section ---------- */
+        .two-col {
+            display: table;
+            width: 100%;
+            table-layout: fixed;
+            border-spacing: 4mm 0;
+        }
+
+        .two-col-cell {
+            display: table-cell;
+            vertical-align: top;
+        }
+
+        .panel-title-row {
+            display: table;
+            width: 100%;
+            margin-bottom: 3mm;
+        }
+
+        .panel-title-icon {
+            display: table-cell;
+            width: 7mm;
+            vertical-align: middle;
+        }
+
+        .panel-title-icon .dot {
+            width: 5.5mm;
+            height: 5.5mm;
+            border-radius: 50%;
+            border: 1px solid #C9D98A;
+            background: #F5F9E9;
+            text-align: center;
+            line-height: 5.5mm;
+            font-size: 8px;
+            color: #6E8A1E;
+        }
+
+        .panel-title-text {
+            display: table-cell;
+            vertical-align: middle;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .panel-title-badge {
+            display: table-cell;
+            text-align: right;
+            vertical-align: middle;
+        }
+
+        .data-row {
+            display: table;
+            width: 100%;
+            padding: 2mm 0;
+            border-bottom: 1px solid #EDF0E9;
+            font-size: 9.5px;
+        }
+
+        .data-row:last-child {
+            border-bottom: none;
+        }
+
+        .data-row .k {
+            display: table-cell;
+            color: #5B6B60;
+        }
+
+        .data-row .v {
+            display: table-cell;
+            text-align: right;
+            font-weight: 700;
+            color: #16241B;
+        }
+
+        .data-row .v.accent {
+            color: #6E8A1E;
+        }
+
+        /* ---------- recomendaciones ---------- */
+        .reco-row {
+            display: table;
+            width: 100%;
+            margin-bottom: 2.5mm;
+        }
+
+        .reco-tag-cell {
+            display: table-cell;
+            width: 46mm;
+            vertical-align: middle;
+        }
+
+        .reco-tag {
+            display: inline-block;
+            font-size: 8px;
+            font-weight: 700;
+            border: 1px solid #C9D98A;
+            background: #F5F9E9;
+            color: #6E8A1E;
+            border-radius: 9999px;
+            padding: 1.5mm 3.5mm;
+        }
+
+        .reco-text-cell {
+            display: table-cell;
+            vertical-align: middle;
+            font-size: 9.5px;
+            color: #2E3A2E;
+            padding-left: 3mm;
+        }
+
+        /* ---------- footer ---------- */
+        .footer-row {
+            display: table;
+            width: 100%;
+            background: #FFFFFF;
+            border: 1px solid #E1E6DC;
+            border-radius: 5mm;
+            padding: 3.5mm 5mm;
+            margin-top: 4mm;
+        }
+
+        .footer-left {
+            display: table-cell;
+            font-size: 9px;
+            color: #5B6B60;
+        }
+
+        .footer-left b {
+            color: #16241B;
+        }
+
+        .footer-right {
+            display: table-cell;
+            text-align: right;
+            font-size: 9px;
+            color: #5B6B60;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="page">
+
+        <!-- HEADER -->
+        <div class="panel header-panel">
+            <div class="header-icon">
+                <div class="icon-circle">&#9650;</div>
+            </div>
+            <div class="header-title">
+                <h1>Ciudad Panamá: Cerro Ancón, Sendero el mirador. (Panamá) - W... -<span class="brand">Wikiloc</span>
+                </h1>
+                <div class="sub">RiskTrail · GPX · 9af7bf5c-2</div>
+            </div>
+            <div class="header-date">8 de septiembre de 2026 a las 02:15 p.m.</div>
+            <div class="header-mide">
+                <div class="mide-badge">
+                    <div class="label">MIDE</div>
+                    <div class="num">2</div>
+                    <div class="desc">Moderado</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PERFIL SENDERISTA -->
+        <div class="panel">
+            <div class="profile-bar">
+                <div class="profile-label">Perfil del senderista</div>
+                <div class="profile-stats">
+                    <span class="item">
+                        <div class="k">Peso</div>
+                        <div class="v">70 kg</div>
+                    </span>
+                    <span class="item">
+                        <div class="k">Carga</div>
+                        <div class="v">10 kg</div>
+                    </span>
+                    <span class="item">
+                        <div class="k">Total</div>
+                        <div class="v">80 kg</div>
+                    </span>
+                    <span class="item">
+                        <div class="k">Forma Física</div>
+                        <div class="v">Media</div>
+                    </span>
+                    <span class="item">
+                        <div class="k">Superficie</div>
+                        <div class="v">Tierra compactada</div>
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- STATS -->
+        <div class="stat-row">
+            <div class="stat-cell">
+                <div class="stat-card">
+                    <div class="big">3.26<span class="unit"> km</span></div>
+                    <div class="label">Distancia</div>
+                </div>
+            </div>
+            <div class="stat-cell">
+                <div class="stat-card">
+                    <div class="big">54<span class="unit"> min</span></div>
+                    <div class="sub">Marcha</div>
+                    <div class="label">Tiempo Est.</div>
+                </div>
+            </div>
+            <div class="stat-cell">
+                <div class="stat-card">
+                    <div class="big">+131m</div>
+                    <div class="sub">−8m</div>
+                    <div class="label">Desnivel</div>
+                </div>
+            </div>
+            <div class="stat-cell">
+                <div class="stat-card">
+                    <div class="big">296<span class="unit"> kcal</span></div>
+                    <div class="label">Energía</div>
+                </div>
+            </div>
+        </div>
+
+        <div style="height:4mm"></div>
+
+        <!-- MIDE DIAGNOSTIC -->
+        <div class="panel">
+            <div class="mide-title-row">
+                <div class="mide-title-cell">Diagnóstico MIDE — Escala de Dificultad de Montaña</div>
+                <div class="mide-level-pill"><span class="pill-outline">Nivel 2 de 5 · Moderado</span></div>
+            </div>
+            <div class="mide-grid">
+                <div class="mide-cell">
+                    <div class="mide-box">
+                        <div class="score">2<span class="of5"> / 5</span></div>
+                        <div class="mide-bar">
+                            <div class="fill" style="width:40%"></div>
+                        </div>
+                        <div class="name">Severidad<br>del Medio</div>
+                    </div>
+                </div>
+                <div class="mide-cell">
+                    <div class="mide-box">
+                        <div class="score">1<span class="of5"> / 5</span></div>
+                        <div class="mide-bar">
+                            <div class="fill" style="width:20%"></div>
+                        </div>
+                        <div class="name">Orientación<br>y Navegación</div>
+                    </div>
+                </div>
+                <div class="mide-cell">
+                    <div class="mide-box">
+                        <div class="score">2<span class="of5"> / 5</span></div>
+                        <div class="mide-bar">
+                            <div class="fill" style="width:40%"></div>
+                        </div>
+                        <div class="name">Dificultad de<br>Desplazamiento</div>
+                    </div>
+                </div>
+                <div class="mide-cell">
+                    <div class="mide-box">
+                        <div class="score">1<span class="of5"> / 5</span></div>
+                        <div class="mide-bar">
+                            <div class="fill" style="width:20%"></div>
+                        </div>
+                        <div class="name">Esfuerzo<br>Requerido</div>
+                    </div>
+                </div>
+            </div>
+            <div class="callout">
+                <div class="check">&#10003;</div>
+                <div class="text"><b>Autonomía fisiológica:</b> La ruta finaliza en 54 min con amplio margen antes del
+                    agotamiento estimado (1 h 29 min).</div>
+            </div>
+        </div>
+
+        <!-- BIOMECANICO + METEO -->
+        <div class="two-col">
+            <div class="two-col-cell">
+                <div class="panel">
+                    <div class="panel-title-row">
+                        <div class="panel-title-icon">
+                            <div class="dot">&#8767;</div>
+                        </div>
+                        <div class="panel-title-text">Análisis Biomecánico del Terreno</div>
+                    </div>
+                    <div class="data-row">
+                        <div class="k">Tramos analizados</div>
+                        <div class="v">33 segmentos</div>
+                    </div>
+                    <div class="data-row">
+                        <div class="k">Correcciones Elev. (Savitzky-Golay)</div>
+                        <div class="v">0 puntos</div>
+                    </div>
+                    <div class="data-row">
+                        <div class="k">Confianza Modelo Minetti</div>
+                        <div class="v accent">100.0%</div>
+                    </div>
+                    <div class="data-row">
+                        <div class="k">Fatiga Excéntrica Detectada</div>
+                        <div class="v">No detectada</div>
+                    </div>
+                    <div class="data-row">
+                        <div class="k">Tramos Campo a Través</div>
+                        <div class="v">No (sendero consolidado)</div>
+                    </div>
+                </div>
+            </div>
+            <div class="two-col-cell">
+                <div class="panel">
+                    <div class="panel-title-row">
+                        <div class="panel-title-icon">
+                            <div class="dot">&#9728;</div>
+                        </div>
+                        <div class="panel-title-text">Meteorología</div>
+                        <div class="panel-title-badge"><span class="pill-outline">Tiempo Real</span></div>
+                    </div>
+                    <div class="data-row">
+                        <div class="k">Temperatura</div>
+                        <div class="v">29.0 °C</div>
+                    </div>
+                    <div class="data-row">
+                        <div class="k">Humedad Relativa</div>
+                        <div class="v">77%</div>
+                    </div>
+                    <div class="data-row">
+                        <div class="k">WBGT (Estrés Térmico)</div>
+                        <div class="v accent">27.7 °C · OK</div>
+                    </div>
+                    <div class="data-row">
+                        <div class="k">Índice UV</div>
+                        <div class="v">2.8 · Moderado</div>
+                    </div>
+                    <div class="data-row">
+                        <div class="k">Precipitación</div>
+                        <div class="v">0.0 mm</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RECOMENDACIONES -->
+        <div class="panel">
+            <div class="panel-title-row">
+                <div class="panel-title-text">Recomendaciones de Seguridad Operativa</div>
+            </div>
+            <div class="reco-row">
+                <div class="reco-tag-cell"><span class="reco-tag">Dificultad Moderada</span></div>
+                <div class="reco-text-cell">Ruta apta para la mayoría de personas con condición física media y calzado
+                    de senderismo.</div>
+            </div>
+            <div class="reco-row">
+                <div class="reco-tag-cell"><span class="reco-tag">Autonomía Óptima</span></div>
+                <div class="reco-text-cell">Concluye en 54 min con margen holgado antes del agotamiento estimado (1 h 29
+                    min).</div>
+            </div>
+            <div class="reco-row">
+                <div class="reco-tag-cell"><span class="reco-tag">Hidratación Recomendada</span></div>
+                <div class="reco-text-cell">Llevar mínimo 500 mL de agua por cada 2 horas de caminata proyectada.</div>
+            </div>
+        </div>
+
+        <!-- FOOTER -->
+        <div class="footer-row">
+            <div class="footer-left">&#9650; <b>RiskTrail</b> · Motor Biomecánico Minetti / Pandolf · Documento técnico
+                de seguridad en senderismo</div>
+            <div class="footer-right">9af7bf5c-2e7 · Página 1 / 1</div>
+        </div>
+
+    </div>
+</body>
+
+</html>
