@@ -15,6 +15,10 @@ dist/
 # Node
 node_modules/
 frontend/dist/
+frontend/package-lock.json
+
+# Local overrides
+docker-compose.override.yml
 
 # Data (large binary files — add specific samples manually if needed)
 data/dem/*.tif
