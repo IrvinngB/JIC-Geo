@@ -1,112 +1,142 @@
 # RiskTrail — Feature Roadmap
 
 > Lista de features planificados, organizados por prioridad y dependencias.
-> Última actualización: 2026-09-09
+> Todo pensado como plataforma desde el día uno: auth → perfiles → historial → GPS.
+> Arquitectura completa: `docs/architecture-plan.md`
+> Última actualización: 2026-09-10
 
 ---
 
-## Tier 1 — MVP funcional
+## Tier 0 — Auth (fundamento)
 
-Lo que falta para que RiskTrail se use de verdad. Sin auth, todo local.
+Sin esto nada funciona. Es la base de todo.
+
+### 19. Auth + sistema de usuarios
+
+**Descripción:** Registro, login y gestión de sesiones. Base para perfiles, historial y sharing por usuario.
+
+**Detalle:**
+- Tabla `users` en PostgreSQL (id, email, name, password_hash, created_at)
+- Registro: email + nombre + contraseña (bcrypt hashing)
+- Login: JWT access token + refresh token
+- Endpoints: `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `GET /auth/me`
+- Middleware JWT en FastAPI para proteger endpoints
+- Frontend: `authStore.ts` (Pinia), `LoginView.vue`, `RegisterView.vue`
+- Protected routes en Vue Router
+- httpOnly cookies para tokens (más seguro que localStorage)
+
+**Dependencias:** Ninguna
+**Complejidad:** Alta
+**Archivos afectados:** `backend/app/modules/auth/`, `backend/app/db/models.py`, `frontend/src/stores/authStore.ts`, `frontend/src/views/LoginView.vue`, `frontend/src/views/RegisterView.vue`, `frontend/src/router/index.ts`
+
+---
+
+## Tier 1 — Perfil + Historial
+
+Lo que falta para que RiskTrail se use de verdad. Todo persiste en PostgreSQL, asociado al usuario via auth.
 
 ### 1. Perfil persistente
 
-**Descripción:** Guardar datos del excursionista (peso, carga, fitness, superficie) en localStorage para que no se pierdan al recargar.
+**Descripción:** Guardar datos del excursionista (peso, carga, fitness, superficie) en PostgreSQL, asociado al usuario autenticado.
 
 **Detalle:**
-- Guardar automáticamente al modificar el formulario
-- Cargar al abrir la app
-- Modo rápido: perfil invitado por defecto (70kg, 10kg, fitness medio, dirt)
+- Tabla `profiles` en PostgreSQL con `user_id` NOT NULL (FK → users)
+- Endpoint `GET /api/v1/profiles` (solo retorna los del usuario actual)
+- Soporte de perfil por defecto (`is_default = true`)
+- Modo rápido: perfil por defecto inicial (70kg, 10kg, fitness medio, dirt)
 - Botón "Restablecer valores por defecto"
 
-**Dependencias:** Ninguna
+**Dependencias:** #19 (auth)
 **Complejidad:** Baja
-**Archivos afectados:** `useHikerProfile.ts`, `HikerProfileForm.vue`
+**Archivos afectados:** `backend/app/db/models.py`, `backend/app/modules/prf/`, `backend/alembic/versions/`, `frontend/src/stores/profileStore.ts`, `frontend/src/components/HikerProfileForm.vue`
 
 ---
 
 ### 2. Múltiples perfiles
 
-**Descripción:** Crear y permutar entre varios perfiles (para ir con distintas personas o grupos).
+**Descripción:** Crear y permutar entre varios perfiles de excursionistas (para salidas individuales o en grupo).
 
 **Detalle:**
-- Lista de perfiles guardados (máx. 5-10)
-- Botón "Nuevo perfil" con nombre descriptivo (ej: "Irvin solo", "Team full", "Con familia")
-- Selector rápido antes de analizar
-- Editar/eliminar perfiles existentes
-- Cada perfil guarda: name, weight_kg, load_kg, fitness_level, surface_type
+- CRUD completo en backend: `GET`, `POST`, `PUT`, `DELETE /api/v1/profiles/{id}`
+- Endpoints: `PUT /api/v1/profiles/{id}/default` para marcar como default
+- Validación de negocio en backend (load < weight, límites plausibles)
+- Selector rápido de perfil activo antes de analizar
+- Modal/panel para administrar perfiles
+- Cada perfil: `name`, `weight_kg`, `load_kg`, `fitness_level`, `surface_type`, `is_default`
 
 **Dependencias:** #1 (perfil persistente)
-**Complejidad:** Baja
-**Archivos afectados:** `useHikerProfile.ts`, `HikerProfileForm.vue`, nuevo componente `ProfileSelector.vue`
+**Complejidad:** Media
+**Archivos afectados:** `backend/app/modules/prf/` (repository, router, schemas, service), `frontend/src/stores/profileStore.ts`, nuevo componente `ProfileSelector.vue`
 
 ---
 
 ### 3. Historial de análisis
 
-**Descripción:** Guardar cada análisis completado con fecha, nombre y resumen para poder revisarlo después.
+**Descripción:** Guardar cada análisis completado en PostgreSQL con resumen denormalizado y resultado completo.
 
 **Detalle:**
-- Al terminar un análisis, preguntar "¿Guardar en historial?"
-- Guardar en IndexedDB: route_name, route_id, date, source_format, summary (MIDE, distance, time, kcal, elevation), segmentos con geometría y risk_score
-- Listado cronológico en sidebar o vista dedicada
-- Filtro por nombre o fecha
-- Tap en un item → re-abrir el análisis completo
+- Tabla `route_history` con `user_id` (FK → users), resumen (MIDE, distancia, tiempo, kcal, elevación, riesgo máx.) y `analysis_json` (JSONB)
+- Índices: fecha creación descendente, favoritos
+- Endpoints:
+  - `POST /api/v1/history` → guardar análisis
+  - `GET /api/v1/history` → listar (filtros: favorito, búsqueda, fecha)
+  - `GET /api/v1/history/{id}` → obtener completo
+  - `DELETE /api/v1/history/{id}` → eliminar
+- Frontend: `historyStore.ts`, listado cronológico, re-apertura en mapa
 
-**Dependencias:** Ninguna
+**Dependencias:** #19 (auth), opcionalmente #1 (profile_id)
 **Complejidad:** Media
-**Archivos afectados:** `routeStore.ts`, nuevo composable `useHistory.ts`, nuevo componente `HistoryList.vue`
+**Archivos afectados:** `backend/app/db/models.py`, `backend/app/modules/his/`, `backend/alembic/versions/`, `frontend/src/stores/historyStore.ts`, nuevo componente `HistoryList.vue`
 
 ---
 
 ### 4. Favoritos
 
-**Descripción:** Marcar rutas del historial como favoritas para acceder rápido.
+**Descripción:** Marcar rutas del historial como favoritas para acceso rápido.
 
 **Detalle:**
-- Estrella toggle en cada item del historial
-- Filtro "Solo favoritos" en el listado
-- Máximo ilimitado (es solo un flag boolean)
-- Persiste en IndexedDB junto al historial
+- Columna `is_favorite` en `route_history` con índice condicional
+- Endpoint `PUT /api/v1/history/{id}/favorite` (toggle)
+- Filtro "Solo favoritos" en frontend
+- Toggle reactivo desde tarjeta del historial
 
 **Dependencias:** #3 (historial)
 **Complejidad:** Baja
-**Archivos afectados:** `useHistory.ts`, `HistoryList.vue`
+**Archivos afectados:** `backend/app/modules/his/`, `frontend/src/stores/historyStore.ts`, `HistoryList.vue`
 
 ---
 
 ### 5. Re-analizar con otro clima
 
-**Descripción:** Sobre un análisis guardado, re-ejecutar la simulación climática con parámetros distintos.
+**Descripción:** Sobre un análisis guardado en PostgreSQL, re-ejecutar la simulación climática sin re-subir el archivo.
 
 **Detalle:**
-- Desde el historial, botón "Re-simular"
-- Carga los segmentos guardados en el routeStore
-- Abre el panel de ClimateSliders
-- Permite cambiar temperatura, humedad, precipitación, UV
-- Ejecuta la simulación local (backend ya calculó los datos base)
+- Desde historial, botón "Re-simular"
+- Carga datos base guardados en `routeStore`
+- Abre panel de ClimateSliders
+- Ejecuta `POST /api/v1/analysis/simulate` en backend
 - Muestra comparación real vs nuevo simulado
 
-**Dependencias:** #3 (historial), backend endpoint existente para simulación
+**Dependencias:** #3 (historial), backend endpoint de simulación
 **Complejidad:** Media
-**Archivos afectados:** `routeStore.ts`, `ClimateSliders.vue`, `HistoryList.vue`
+**Archivos afectados:** `frontend/src/stores/routeStore.ts`, `ClimateSliders.vue`, `HistoryList.vue`
 
 ---
 
 ## Tier 2 — Ubicación real
 
-Lo que diferencia a RiskTrail de otras apps de hiking. Requiere geolocalización del navegador.
+Lo que diferencia a RiskTrail de otras apps. Requiere geolocalización del navegador.
 
 ### 6. GPS tracking básico
 
-**Descripción:** Mostrar la posición actual del usuario en el mapa y identificar el tramo más cercano.
+**Descripción:** Mostrar la posición actual del usuario en el mapa e identificar el tramo más cercano.
 
 **Detalle:**
 - Botón flotante "¿Dónde estoy?" en el mapa
-- Usa `navigator.geolocation.getCurrentPosition()`
-- Centra el mapa en la posición actual
-- Muestra badge con: tramo #X, riesgo Y/100, dirección (subida/bajada)
-- Requiere permiso de ubicación del usuario
+- `navigator.geolocation.getCurrentPosition()`
+- Centra mapa en posición actual
+- Badge: tramo #X, riesgo Y/100, dirección
+- Requiere permiso de ubicación
 - Funciona sin internet (GPS satelital)
 
 **Dependencias:** Análisis previo con geometría de segmentos
@@ -120,14 +150,11 @@ Lo que diferencia a RiskTrail de otras apps de hiking. Requiere geolocalización
 **Descripción:** Notificación cuando el usuario entra a un tramo de riesgo alto o extremo.
 
 **Detalle:**
-- Tracking continuo de posición cada 3-5 segundos
-- Matching de posición contra tramos (nearestPointOnLine con turf.js)
-- Al detectar tramo con risk_score >= 60:
-  - Vibración del dispositivo (`navigator.vibrate()`)
-  - Badge rojo visible en el mapa
-  - Sound de alerta (opcional)
-- Al salir del tramo peligroso: alerta se limpia
-- Toggle para activar/desactivar alertas
+- Tracking continuo cada 3-5 segundos
+- Matching posición↔tramo con turf.js `nearestPointOnLine()`
+- Si risk_score >= 60: vibración, badge rojo, sonido (opcional)
+- Al salir del tramo: alerta se limpia
+- Toggle activar/desactivar alertas
 
 **Dependencias:** #6 (GPS tracking), turf.js
 **Complejidad:** Media-Alta
@@ -137,18 +164,18 @@ Lo que diferencia a RiskTrail de otras apps de hiking. Requiere geolocalización
 
 ### 8. Registro de ruta real
 
-**Descripción:** Guardar el recorrido GPS real del usuario y compararlo con la ruta planificada.
+**Descripción:** Guardar el recorrido GPS real en PostgreSQL y comparar con la ruta planificada.
 
 **Detalle:**
 - Al iniciar tracking, grabar puntos GPS cada 5 segundos
-- Al terminar, guardar la polilínea real en IndexedDB
-- Vista de comparación: ruta planificada (azul) vs ruta real (verde)
-- Métricas: distancia real vs estimada, tiempo real vs estimado, desviación máxima
-- Opcional: exportar la ruta real como GPX
+- Al terminar, guardar LineString en tabla `gps_tracks` (FK → route_history)
+- Vista de comparación: planificada (azul) vs real (verde)
+- Métricas: distancia real vs estimada, tiempo, desviación máxima
+- Opcional: exportar ruta real como GPX
 
-**Dependencias:** #6 (GPS tracking)
+**Dependencias:** #6 (GPS tracking), #3 (historial)
 **Complejidad:** Alta
-**Archivos afectados:** `useGeolocation.ts`, nuevo componente `RouteComparison.vue`, `routeStore.ts`
+**Archivos afectados:** `useGeolocation.ts`, `backend/app/modules/tracking/`, nuevo componente `RouteComparison.vue`
 
 ---
 
@@ -157,11 +184,11 @@ Lo que diferencia a RiskTrail de otras apps de hiking. Requiere geolocalización
 **Descripción:** Elegir dos análisis del historial y verlos lado a lado.
 
 **Detalle:**
-- Checkbox de selección en el historial (máx. 2)
-- Botón "Comparar" se activa con 2 seleccionados
-- Vista split: cada ruta con su MIDE, tiempo, distancia, kcal, riesgo máximo
-- Highlight de diferencias (ej: "esta ruta tiene 30% más de riesgo")
-- Responsive: en mobile, apilados verticalmente
+- Checkbox selección en historial (máx. 2)
+- Botón "Comparar" activo con 2 seleccionados
+- Vista split: MIDE, tiempo, distancia, kcal, riesgo máximo
+- Highlight de diferencias
+- Responsive: apilados en mobile
 
 **Dependencias:** #3 (historial)
 **Complejidad:** Media
@@ -171,39 +198,39 @@ Lo que diferencia a RiskTrail de otras apps de hiking. Requiere geolocalización
 
 ## Tier 3 — Offline
 
-Para que RiskTrail funcione en el campo sin señal.
+Para que funcione en el campo sin señal. Cache local de datos que ya están en el backend.
 
 ### 10. Cache de análisis
 
-**Descripción:** Almacenar el análisis completo (segmentos + geometría + risk) en IndexedDB para uso offline.
+**Descripción:** Descargar análisis completo del backend a IndexedDB para uso offline.
 
 **Detalle:**
-- Al completar un análisis, guardar automáticamente en IndexedDB
-- Estructura: segmentos con geom (LineString), risk_score, velocity, slope, etc.
-- Al abrir historial sin internet, los análisis siguen accesibles
-- Límite de storage: ~50 análisis (configurable)
-- Estrategia LRU: borrar los más viejos al superar el límite
+- Desde historial, botón "Descargar para offline"
+- `GET /api/v1/offline/analysis/{id}` → descarga segmentos + geometría
+- Guarda en IndexedDB
+- Al abrir sin internet, análisis siguen accesibles
+- Límite: ~50 análisis (LRU)
+- Indicador de "disponible offline" en el historial
 
 **Dependencias:** #3 (historial)
 **Complejidad:** Media
-**Archivos afectados:** `useHistory.ts`, schema de IndexedDB
+**Archivos afectados:** `frontend/src/utils/offlineDb.ts`, `HistoryList.vue`
 
 ---
 
 ### 11. Cache de tiles del mapa
 
-**Descripción:** Descargar los tiles del mapa de la zona de hiking para uso offline.
+**Descripción:** Descargar tiles del mapa de la zona para uso offline.
 
 **Detalle:**
-- Antes de ir al sendero, botón "Descargar zona" en el mapa
-- Calcula bounding box del área visible + buffer de 5km
-- Descarga tiles del base map seleccionado (streets/topo/satellite)
-- Almacena en Cache API (service worker)
-- indicador de progreso de descarga
-- Al usar mapa sin internet, sirve tiles del cache
-- Eliminar zona descargada cuando ya no se necesite
+- Botón "Descargar zona" en el mapa
+- Calcula bounding box + buffer 5km
+- Descarga tiles (streets/topo/satellite) a Cache API via service worker
+- Indicador de progreso
+- Sirve tiles del cache cuando no hay internet
+- Eliminar zona descargada
 
-**Dependencias:** Service worker (nuevo), MapLibre offline plugin
+**Dependencias:** Service worker (nuevo), MapLibre
 **Complejidad:** Alta
 **Archivos afectados:** nuevo `sw.js`, `RouteMap.vue`, nuevo componente `OfflineManager.vue`
 
@@ -211,14 +238,12 @@ Para que RiskTrail funcione en el campo sin señal.
 
 ### 12. Matching offline tramo↔posición
 
-**Descripción:** Determinar en qué tramo está el usuario usando solo datos cacheados.
+**Descripción:** Determinar tramo actual usando solo datos cacheados en IndexedDB.
 
 **Detalle:**
-- Sin backend: usa turf.js `nearestPointOnLine()` contra segmentos en IndexedDB
-- Calcula distancia del punto actual a cada segmento
-- Retorna el tramo más cercano dentro de un radio máximo (ej: 100m)
-- Si está fuera de radio → "Fuera de la ruta"
-- Performance: pre-filtrar por bounding box antes del cálculo completo
+- turf.js `nearestPointOnLine()` contra segmentos en IndexedDB
+- Pre-filtrar por bounding box antes del cálculo completo
+- Radio máximo: 100m → fuera de radio = "Fuera de la ruta"
 - Actualización cada 3-5 segundos
 
 **Dependencias:** #6 (GPS tracking), #10 (cache de análisis), turf.js
@@ -229,40 +254,37 @@ Para que RiskTrail funcione en el campo sin señal.
 
 ## Tier 4 — Social y utilidades
 
-Features que amplían el alcance y la utilidad social.
+Features que amplían alcance y utilidad social.
 
 ### 13. Compartir análisis
 
-**Descripción:** Generar un link público con el resumen del análisis de una ruta.
+**Descripción:** Generar link público con el resumen del análisis.
 
 **Detalle:**
 - Botón "Compartir" en el análisis
-- Genera un ID corto (ej: `/share/abc123`)
-- Backend crea registro público con: route_name, MIDE, distancia, tiempo, riesgo máximo, mapa estático
+- Genera share_code corto (ej: `/share/abc123`)
+- Backend: tabla `shared_routes` con link a `route_history`
 - Link accesible sin login
 - Preview con imagen OG para WhatsApp/social
-- Opcional: incluir perfil del excursionista (sin datos sensibles)
 
-**Dependencias:** #3 (historial), backend endpoint nuevo
+**Dependencias:** #3 (historial), tabla `shared_routes`
 **Complejidad:** Media
-**Archivos afectados:** backend nuevo router `share.py`, frontend nuevo componente `ShareView.vue`
+**Archivos afectados:** `backend/app/modules/share/`, frontend nuevo componente `ShareView.vue`
 
 ---
 
 ### 14. Alerta meteorológica
 
-**Descripción:** Notificar al usuario si el clima pronosticado cambia para una ruta que tiene guardada como "próxima salida".
+**Descripción:** Notificar si el clima pronosticado cambia para una ruta guardada como "próxima salida".
 
 **Detalle:**
-- Marcar una ruta del historial como "próxima salida" (con fecha estimada)
-- Cada 6 horas, consultar API meteorológica para la zona
-- Si el pronóstico cambia significativamente (lluvia repentina, calor extremo, UV alto):
-  - Notificación push (si el browser lo soporta)
-  - Badge en la app
-- Requiere backend con job scheduler (ej: Celery o cron)
-- Requiere API de clima (OpenWeather, visualcrossing, etc.)
+- Marcar ruta como "próxima salida" (con fecha)
+- Cada 6h consultar API meteorológica
+- Si cambia significativamente → notificación push + badge
+- Requiere job scheduler en backend (Celery/cron)
+- API de clima: OpenWeather, visualcrossing, etc.
 
-**Dependencias:** #3 (historial), API meteorológica, backend scheduler
+**Dependencias:** #3 (historial), API meteorológica, scheduler
 **Complejidad:** Alta
 **Archivos afectados:** backend nuevo servicio `weather_alerts.py`, frontend notificaciones
 
@@ -270,105 +292,97 @@ Features que amplían el alcance y la utilidad social.
 
 ### 15. Condiciones del trail (crowd-sourced)
 
-**Descripción:** Reportes de otros usuarios sobre el estado actual del sendero.
+**Descripción:** Reportes de usuarios sobre el estado del sendero.
 
 **Detalle:**
-- Botón "Reportar condición" en el mapa (por tramo)
+- Botón "Reportar condición" por tramo
 - Categorías: limpio, embarrado, árbol caído, inundado, cerrado
-- Opcional: foto del estado
-- Los reportes se muestran como iconos en el mapa
-- Expiran después de 30 días (o configurable)
-- Requiere auth (para accountability)
+- Opcional: foto
+- Iconos en el mapa
+- Expiran a 30 días
+- Requiere auth
 
-**Dependencias:** Auth (#19), backend modelo `TrailReport`
+**Dependencias:** #19 (auth), backend modelo `TrailReport`
 **Complejidad:** Alta
-**Archivos afectados:** backend nuevo router `reports.py`, frontend nuevo componente `TrailReports.vue`
+**Archivos afectados:** `backend/app/modules/reports/`, frontend `TrailReports.vue`
 
 ---
 
 ### 16. Exportar a GPS device
 
-**Descripción:** Exportar la ruta óptima como GPX para Garmin u otros dispositivos GPS.
+**Descripción:** Exportar ruta óptima como GPX para Garmin/etc.
 
 **Detalle:**
-- Botón "Exportar GPX" en la ruta óptima
-- Genera GPX con: waypoints (inicio, fin, paradas), tracklog de la ruta óptima
-- Incluye metadata: nombre, descripción, elevación
-- Descarga como archivo `.gpx`
-- Compatible con Garmin, Suunto, Coros, Komoot
+- Botón "Exportar GPX" en ruta óptima
+- Genera GPX: waypoints + tracklog
+- Metadata: nombre, descripción, elevación
+- Descarga archivo `.gpx`
 
-**Dependencias:** Ruta óptima calculada (# routing existente)
+**Dependencias:** Ruta óptima calculada
 **Complejidad:** Baja
 **Archivos afectados:** nuevo util `gpxExport.ts`
 
 ---
 
-## Tier 5 — Growth y plataforma
+## Tier 5 — Growth
 
-Features de escala que convierten RiskTrail en plataforma.
+Features de escala.
 
 ### 17. Ruta sugerida
 
 **Descripción:** "Quiero10km nivel medio" → sugerir rutas del catálogo.
 
 **Detalle:**
-- Formulario: distancia deseada, dificultad máxima, tipo de superficie, ubicación
-- Backend busca en rutas pre-analizadas que cumplan los criterios
-- Retorna top5 con preview de MIDE, distancia, tiempo
-- Requiere catálogo de rutas pre-analizadas (alimentado manual o por upload masivo)
+- Formulario: distancia, dificultad, superficie, ubicación
+- Backend busca en rutas pre-analizadas
+- Top5 con preview
+- Requiere catálogo de rutas
 
 **Dependencias:** Catálogo de rutas, backend búsqueda
 **Complejidad:** Alta
-**Archivos afectados:** backend nuevo endpoint `suggest.py`, frontend nuevo componente `RouteSuggester.vue`
+**Archivos afectados:** `backend/app/modules/suggest/`, `RouteSuggester.vue`
 
 ---
 
 ### 18. Foto por segmento
 
-**Descripción:** Adjuntar fotos a tramos del historial para documentar el recorrido.
+**Descripción:** Adjuntar fotos a tramos del historial.
 
 **Detalle:**
-- Durante el tracking o después, asociar foto a un tramo específico
-- Almacenar foto comprimida en IndexedDB (max 500KB por foto)
-- Mostrar thumbnail en el detalle del tramo
-- Galería de fotos del recorrido completo
-- Opcional: exif data para geolocalizar la foto
+- Asociar foto a tramo específico
+- Almacenar en backend (S3-compatible o storage local)
+- Thumbnail en detalle del tramo
+- Galería del recorrido
+- EXIF para geolocalizar
 
-**Dependencias:** #8 (registro de ruta real) o #3 (historial)
+**Dependencias:** #8 (registro ruta real) o #3 (historial)
 **Complejidad:** Media
-**Archivos afectados:** `routeStore.ts`, nuevo componente `SegmentPhotos.vue`
-
----
-
-### 19. Auth + sync multi-dispositivo
-
-**Descripción:** Sistema de autenticación para sincronizar perfiles, historial y configuración entre dispositivos.
-
-**Detalle:**
-- Registro: email + contraseña (bcrypt hashing)
-- Login: JWT access token + refresh token
-- Endpoints CRUD para perfiles e historial por usuario
-- Sync: al tener conexión, subir datos locales al backend
-- Migración: importar datos de localStorage al primer login
-- Protected routes en frontend (Pinia auth store)
-
-**Dependencias:** Backend user model, JWT middleware
-**Complejidad:** Alta
-**Archivos afectados:** backend nuevo router `auth.py`, `users.py`, frontend nuevo store `authStore.ts`, nuevos componentes `LoginView.vue`, `RegisterView.vue`
+**Archivos afectados:** `routeStore.ts`, backend storage, `SegmentPhotos.vue`
 
 ---
 
 ## Sprint Plan
 
+### Sprint0 — Auth (1 semana)
+
+| Feature | Días estimados |
+|---------|---------------|
+| DB Schema: tabla `users` + migración | 0.5 |
+| Backend: register, login, refresh, me | 2 |
+| Frontend: authStore, LoginView, RegisterView | 1.5 |
+| Protected routes en Vue Router | 0.5 |
+| **Total** | **4.5 días** |
+
 ### Sprint1 — Perfil + Historial (1-2 semanas)
 
 | Feature | Días estimados |
 |---------|---------------|
-| #1 Perfil persistente | 0.5 |
-| #2 Múltiples perfiles | 1 |
-| #3 Historial | 2 |
-| #4 Favoritos | 0.5 |
-| **Total** | **4 días** |
+| DB Schema: `profiles` + `route_history` + migración | 1 |
+| Backend: CRUD perfiles (`/api/v1/profiles`) | 1 |
+| Backend: Historial y favoritos (`/api/v1/history`) | 1 |
+| Frontend: profileStore + Selector y gestión | 1 |
+| Frontend: historyStore + Listado y favoritos | 1 |
+| **Total** | **5 días** |
 
 ### Sprint2 — GPS + Alertas (1-2 semanas)
 
@@ -376,7 +390,7 @@ Features de escala que convierten RiskTrail en plataforma.
 |---------|---------------|
 | #6 GPS tracking | 1.5 |
 | #7 Alerta tramo peligroso | 1.5 |
-| #10 Cache de análisis | 1 |
+| #10 Cache de análisis (offline) | 1 |
 | **Total** | **4 días** |
 
 ### Sprint3 — Comparar + Compartir (1 semana)
@@ -404,4 +418,10 @@ Features de escala que convierten RiskTrail en plataforma.
 - #16 Exportar GPX
 - #17 Ruta sugerida
 - #18 Foto por segmento
-- #19 Auth + sync
+
+---
+
+## Referencia
+
+- Arquitectura completa: `docs/architecture-plan.md`
+- DB Schema, API endpoints, Frontend stores, Data flow, Deployment
