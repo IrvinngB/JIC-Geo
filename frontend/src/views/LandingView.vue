@@ -294,18 +294,17 @@ const authors = [
             <img :src="author.avatar" :alt="author.name" class="mx-auto h-20 w-20 rounded-full object-cover ring-2 ring-base-300/40 transition group-hover:ring-primary/40" />
             <h3 class="mt-4 font-bold">{{ author.name }}</h3>
             <p class="mt-1 text-xs text-base-content/50">{{ author.role }}</p>
-            <a :href="author.github" target="_blank" class="mt-3 inline-flex items-center gap-1.5 text-xs text-primary hover:underline">
-              <AppIcon name="github" :size="14" />
-              @{{ author.githubUser }}
-            </a>
-            <a v-if="author.portfolio" :href="author.portfolio" target="_blank" class="mt-1 inline-flex items-center gap-1.5 text-xs text-base-content/40 hover:text-primary hover:underline">
-              <AppIcon name="globe" :size="12" />
-              Portfolio
-            </a>
-            <a v-if="author.linkedin" :href="author.linkedin" target="_blank" class="mt-1 inline-flex items-center gap-1.5 text-xs text-base-content/40 hover:text-primary hover:underline">
-              <AppIcon name="linkedin" :size="12" />
-              LinkedIn
-            </a>
+            <div class="mt-3 flex items-center justify-center gap-3">
+              <a :href="author.github" target="_blank" class="text-base-content/30 transition hover:text-primary" title="GitHub">
+                <AppIcon name="github" :size="16" />
+              </a>
+              <a v-if="author.portfolio" :href="author.portfolio" target="_blank" class="text-base-content/30 transition hover:text-primary" title="Portfolio">
+                <AppIcon name="globe" :size="16" />
+              </a>
+              <a v-if="author.linkedin" :href="author.linkedin" target="_blank" class="text-base-content/30 transition hover:text-primary" title="LinkedIn">
+                <AppIcon name="linkedin" :size="16" />
+              </a>
+            </div>
           </div>
         </div>
       </div>
