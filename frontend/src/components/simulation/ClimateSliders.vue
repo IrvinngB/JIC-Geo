@@ -31,17 +31,17 @@ function formatNumber(value: number, digits = 0): string {
 </script>
 
 <template>
-  <section class="space-y-3 rounded-box bg-base-100 p-4 shadow-sm">
-    <div class="grid grid-cols-2 gap-2">
-      <button class="btn btn-xs" :disabled="props.disabled" @click="emit('scenario', 'dry')">Seco</button>
-      <button class="btn btn-xs" :disabled="props.disabled" @click="emit('scenario', 'light_rain')">Lluvia leve</button>
-      <button class="btn btn-xs" :disabled="props.disabled" @click="emit('scenario', 'heavy_rain')">Lluvia fuerte</button>
-      <button class="btn btn-xs" :disabled="props.disabled" @click="emit('scenario', 'extreme_heat')">Calor extremo</button>
-      <button class="btn btn-xs col-span-2" :disabled="props.disabled" @click="emit('scenario', 'night')">Noche</button>
+  <section class="space-y-2.5 rounded-box bg-base-100 p-3 shadow-sm sm:space-y-3 sm:p-4">
+    <div class="grid grid-cols-2 gap-1.5 sm:gap-2">
+      <button class="btn btn-xs sm:btn-sm" :disabled="props.disabled" @click="emit('scenario', 'dry')">Seco</button>
+      <button class="btn btn-xs sm:btn-sm" :disabled="props.disabled" @click="emit('scenario', 'light_rain')">Lluvia leve</button>
+      <button class="btn btn-xs sm:btn-sm" :disabled="props.disabled" @click="emit('scenario', 'heavy_rain')">Lluvia fuerte</button>
+      <button class="btn btn-xs sm:btn-sm" :disabled="props.disabled" @click="emit('scenario', 'extreme_heat')">Calor extremo</button>
+      <button class="btn btn-xs sm:btn-sm col-span-2" :disabled="props.disabled" @click="emit('scenario', 'night')">Noche</button>
     </div>
 
-    <label class="block text-xs font-semibold">
-      Temperatura: {{ props.modelValue.temperature_c }} C
+    <label class="block text-[11px] font-semibold sm:text-xs">
+      Temperatura: {{ props.modelValue.temperature_c }}°C
       <input
         type="range"
         min="0"
@@ -53,7 +53,7 @@ function formatNumber(value: number, digits = 0): string {
       />
     </label>
 
-    <label class="block text-xs font-semibold">
+    <label class="block text-[11px] font-semibold sm:text-xs">
       Humedad: {{ props.modelValue.humidity_pct }}%
       <input
         type="range"
@@ -66,8 +66,8 @@ function formatNumber(value: number, digits = 0): string {
       />
     </label>
 
-    <label class="block text-xs font-semibold">
-      Precipitacion: {{ props.modelValue.precip_mm }} mm
+    <label class="block text-[11px] font-semibold sm:text-xs">
+      Precipitación: {{ props.modelValue.precip_mm }} mm
       <input
         type="range"
         min="0"
@@ -79,7 +79,7 @@ function formatNumber(value: number, digits = 0): string {
       />
     </label>
 
-    <label class="block text-xs font-semibold">
+    <label class="block text-[11px] font-semibold sm:text-xs">
       UV: {{ props.modelValue.uv_index }}
       <input
         type="range"
@@ -92,12 +92,12 @@ function formatNumber(value: number, digits = 0): string {
       />
     </label>
 
-    <button class="btn btn-primary btn-sm w-full" :disabled="props.disabled" @click="emit('run')">
+    <button class="btn btn-primary btn-sm w-full sm:btn-md" :disabled="props.disabled" @click="emit('run')">
       Simular clima
     </button>
 
-    <div v-if="props.comparison" class="rounded-box bg-base-200 p-3 text-xs">
-      <h3 class="mb-2 font-bold">Real vs simulado</h3>
+    <div v-if="props.comparison" class="rounded-box bg-base-200 p-2.5 text-[11px] sm:p-3 sm:text-xs">
+      <h3 class="mb-1.5 font-bold sm:mb-2">Real vs simulado</h3>
       <div class="grid grid-cols-3 gap-1 text-center">
         <span class="text-base-content/50"></span>
         <span class="font-semibold text-base-content/70">Real</span>

@@ -78,8 +78,18 @@ const hasGeometries = computed(
 
 const visibleSegments = computed(() => props.analysis?.segments ?? [])
 
+const showEmptyPrompt = ref(true)
+let emptyPromptTimer: ReturnType<typeof setTimeout> | null = null
+
 onMounted(() => {
   if (!mapContainer.value) return
+
+  // Auto-dismiss prompt banner after 10s on mobile (<768px)
+  if (typeof window !== 'undefined' && window.innerWidth < 768) {
+    emptyPromptTimer = setTimeout(() => {
+      showEmptyPrompt.value = false
+    }, 10000)
+  }
 
   map = new maplibregl.Map({
     container: mapContainer.value,
@@ -107,15 +117,19 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  if (emptyPromptTimer) {
+    clearTimeout(emptyPromptTimer)
+    emptyPromptTimer = null
+  }
   map?.remove()
   map = null
 })
 
-/** Captures the current map view as a PNG base64 data URL. */
+/** Captures the current map view as a JPEG base64 data URL. */
 function captureImage(): string | null {
   if (!map) return null
   try {
-    return map.getCanvas().toDataURL('image/png')
+    return map.getCanvas().toDataURL('image/jpeg', 0.85)
   } catch {
     return null
   }
@@ -402,11 +416,11 @@ function fitToFeatures(data: FeatureCollection<LineString>): void {
   }
 
   if (!bounds.isEmpty()) {
+    const isMobile = window.innerWidth < 640
     map.fitBounds(bounds, {
-      // Asymmetric padding leaves room for the floating panels so the route
-      // is never hidden behind them: extra space at the bottom (segment list)
-      // and on the right (base-map control).
-      padding: { top: 90, bottom: 280, left: 60, right: 90 },
+      padding: isMobile
+        ? { top: 60, bottom: 100, left: 20, right: 20 }
+        : { top: 90, bottom: 280, left: 60, right: 90 },
       maxZoom: terrainEnabled.value ? 14 : 15,
       pitch: terrainEnabled.value ? 62 : 0,
       bearing: terrainEnabled.value ? -25 : 0,
@@ -543,7 +557,7 @@ function flyToSegment(seq: number | null): void {
   if (bounds.isEmpty()) return
 
   map.fitBounds(bounds, {
-    padding: 160,
+    padding: window.innerWidth < 640 ? 80 : 160,
     maxZoom: 16,
     duration: 800,
   })
@@ -597,20 +611,21 @@ function buildPopupHTML(segment: RouteAnalysis['segments'][number]): string {
   <section class="relative h-full w-full bg-base-300">
     <div ref="mapContainer" class="h-full w-full"></div>
 
-    <div class="absolute right-4 top-4 z-10 w-64 rounded-box bg-base-100/95 p-3 shadow-xl backdrop-blur">
-      <div class="mb-3 flex items-center justify-between gap-3">
+    <!-- Base map control -->
+    <div class="absolute right-3 top-3 z-10 w-44 rounded-xl bg-base-100/95 p-2.5 shadow-xl backdrop-blur sm:right-4 sm:w-64 sm:p-3">
+      <div class="mb-2 flex items-center justify-between gap-2">
         <div>
-          <h3 class="text-sm font-bold">Mapa</h3>
-          <p class="text-xs text-base-content/60">{{ currentBaseMap.description }}</p>
+          <h3 class="text-xs font-bold sm:text-sm">Mapa</h3>
+          <p class="hidden text-xs text-base-content/60 sm:block">{{ currentBaseMap.description }}</p>
         </div>
-        <label class="swap btn btn-ghost btn-sm">
+        <label class="swap btn btn-ghost btn-xs sm:btn-sm">
           <input v-model="terrainEnabled" type="checkbox" />
           <span class="swap-off text-xs font-bold">2D</span>
           <span class="swap-on text-xs font-bold">3D</span>
         </label>
       </div>
 
-      <div class="grid grid-cols-3 gap-2">
+      <div class="grid grid-cols-3 gap-1 sm:gap-2">
         <button
           v-for="baseMap in BASE_MAPS"
           :key="baseMap.id"
@@ -631,66 +646,114 @@ function buildPopupHTML(segment: RouteAnalysis['segments'][number]): string {
       </button>
     </div>
 
-    <div class="pointer-events-none absolute inset-x-4 top-4 flex flex-col gap-3 md:inset-x-auto md:left-4 md:w-80">
+    <Transition
+      enter-active-class="transition-opacity duration-300 ease-out"
+      leave-active-class="transition-opacity duration-500 ease-in"
+      enter-from-class="opacity-0"
+      leave-to-class="opacity-0"
+    >
       <div
-        v-if="!props.analysis"
-        class="rounded-2xl border border-base-300/60 bg-base-100/90 p-4 shadow-lg backdrop-blur"
+        v-if="!props.analysis && showEmptyPrompt"
+        class="pointer-events-none absolute left-3 top-28 z-10 right-3 sm:right-auto sm:left-4 sm:top-4 sm:w-80"
       >
-        <div class="flex items-start gap-3">
-          <span
-            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"
-          >
-            <AppIcon name="map" :size="20" />
-          </span>
-          <div>
-            <h3 class="font-bold">Carga una ruta para empezar</h3>
-            <p class="mt-1 text-xs text-base-content/70">
-              Sube tu GPX o GeoJSON en el panel. El mapa mostrará el recorrido coloreado por riesgo
-              en cuanto termine el análisis.
-            </p>
+        <div
+          class="pointer-events-auto flex items-start justify-between gap-2 rounded-xl border border-base-300/60 bg-base-100/90 p-3 shadow-lg backdrop-blur sm:rounded-2xl sm:p-4"
+        >
+          <div class="flex items-start gap-2.5 sm:gap-3">
+            <span
+              class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary sm:h-10 sm:w-10 sm:rounded-xl"
+            >
+              <AppIcon name="map" :size="18" />
+            </span>
+            <div>
+              <h3 class="text-sm font-bold">Carga una ruta</h3>
+              <p class="mt-0.5 text-[11px] leading-relaxed text-base-content/70 sm:mt-1 sm:text-xs">
+                Sube tu GPX o GeoJSON en el panel.
+              </p>
+            </div>
           </div>
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-base-content"
+            title="Cerrar aviso"
+            @click="showEmptyPrompt = false"
+          >
+            ✕
+          </button>
         </div>
       </div>
+    </Transition>
 
-      <div v-else-if="!hasGeometries" class="alert alert-warning bg-base-100/90 shadow-lg backdrop-blur">
+    <div
+      v-if="props.analysis && !hasGeometries"
+      class="pointer-events-none absolute left-3 top-28 z-10 right-3 sm:right-auto sm:left-4 sm:top-4 sm:w-80"
+    >
+      <div class="pointer-events-auto alert alert-warning bg-base-100/90 shadow-lg backdrop-blur">
         <div>
-          <h3 class="font-bold">Análisis listo</h3>
-          <p class="text-xs text-base-content/70">
+          <h3 class="font-bold text-sm">Análisis listo</h3>
+          <p class="text-[11px] text-base-content/70 sm:text-xs">
             No hay geometrías disponibles para dibujar la línea de ruta.
           </p>
         </div>
       </div>
     </div>
 
+    <!-- Segment list — horizontal strip on mobile, panel on desktop -->
     <div
       v-if="props.analysis"
-      class="absolute bottom-4 left-4 right-4 hidden max-h-64 rounded-box bg-base-100/95 p-3 shadow-xl backdrop-blur md:right-auto md:block md:w-96"
+      class="absolute bottom-3 left-3 right-3 z-10 rounded-xl bg-base-100/95 shadow-xl backdrop-blur sm:bottom-4 sm:left-4 sm:right-auto sm:w-96 sm:rounded-box sm:p-3"
     >
-      <div class="mb-2 flex items-center justify-between">
-        <h3 class="text-sm font-bold">Segmentos</h3>
-        <span class="badge badge-ghost">{{ props.analysis.segments.length }}</span>
-      </div>
-      <div class="max-h-48 overflow-y-auto pr-2">
-        <div class="space-y-2">
+      <!-- Mobile: compact horizontal scroll -->
+      <div class="sm:hidden">
+        <div class="mb-1.5 flex items-center justify-between px-1">
+          <h3 class="text-xs font-bold">Segmentos</h3>
+          <span class="badge badge-ghost badge-xs">{{ props.analysis.segments.length }}</span>
+        </div>
+        <div class="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
           <button
             v-for="segment in visibleSegments"
             :key="segment.seq"
-            class="btn btn-ghost h-auto min-h-0 w-full justify-start p-2 text-left"
-            :class="segment.seq === props.selectedSeq ? 'bg-primary/10' : ''"
+            class="flex shrink-0 flex-col items-center gap-0.5 rounded-lg px-2.5 py-1.5 text-center transition"
+            :class="segment.seq === props.selectedSeq ? 'bg-primary/15 ring-1 ring-primary/40' : 'bg-base-200/60'"
             @click="emit('selectSegment', segment.seq)"
           >
-            <div class="flex w-full items-center justify-between gap-3">
-              <div>
-                <p class="text-xs font-semibold">#{{ segment.seq }} · {{ segment.direction }}</p>
-                <p class="text-xs text-base-content/60">
-                  {{ segment.velocity_kmh }} km/h · {{ segment.kcal }} kcal · S {{ segment.slope_pct }}
-                </p>
-              </div>
-              <span class="badge badge-sm" :class="riskBadgeClass(segment.risk_score)">
-                {{ segment.risk_score }}
-              </span>
-            </div>
+            <span class="text-[10px] font-bold leading-none">#{{ segment.seq }}</span>
+            <span
+              class="h-2 w-2 rounded-full"
+              :class="segment.risk_score >= 80 ? 'bg-secondary' : segment.risk_score >= 60 ? 'bg-error' : segment.risk_score >= 40 ? 'bg-warning' : segment.risk_score >= 20 ? 'bg-warning/60' : 'bg-success'"
+            ></span>
           </button>
+        </div>
+      </div>
+
+      <!-- Desktop: full list panel -->
+      <div class="hidden sm:block">
+        <div class="mb-2 flex items-center justify-between">
+          <h3 class="text-sm font-bold">Segmentos</h3>
+          <span class="badge badge-ghost">{{ props.analysis.segments.length }}</span>
+        </div>
+        <div class="max-h-48 overflow-y-auto pr-2">
+          <div class="space-y-2">
+            <button
+              v-for="segment in visibleSegments"
+              :key="segment.seq"
+              class="btn btn-ghost h-auto min-h-0 w-full justify-start p-2 text-left"
+              :class="segment.seq === props.selectedSeq ? 'bg-primary/10' : ''"
+              @click="emit('selectSegment', segment.seq)"
+            >
+              <div class="flex w-full items-center justify-between gap-3">
+                <div>
+                  <p class="text-xs font-semibold">#{{ segment.seq }} · {{ segment.direction }}</p>
+                  <p class="text-xs text-base-content/60">
+                    {{ segment.velocity_kmh }} km/h · {{ segment.kcal }} kcal · S {{ segment.slope_pct }}
+                  </p>
+                </div>
+                <span class="badge badge-sm" :class="riskBadgeClass(segment.risk_score)">
+                  {{ segment.risk_score }}
+                </span>
+              </div>
+            </button>
+          </div>
         </div>
       </div>
     </div>

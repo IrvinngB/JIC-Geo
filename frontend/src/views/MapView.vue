@@ -171,7 +171,7 @@ async function applyScenario(scenario: SimulationScenario): Promise<void> {
   <div class="relative flex h-screen w-screen flex-col overflow-hidden bg-base-300 text-base-content md:flex-row">
     <aside
       class="fixed inset-x-0 bottom-0 z-30 flex h-[85vh] flex-col rounded-t-2xl bg-base-200 shadow-2xl transition-transform duration-300 ease-out md:relative md:z-auto md:h-auto md:w-[var(--sidebar-width)] md:shrink-0 md:translate-y-0 md:rounded-none md:border-r md:border-base-100 md:shadow-none"
-      :class="sheetOpen ? 'translate-y-0' : 'translate-y-[calc(85vh_-_3.5rem)] md:translate-y-0'"
+      :class="sheetOpen ? 'translate-y-0' : 'translate-y-[calc(85vh_-_3rem)] md:translate-y-0'"
       :style="{ '--sidebar-width': `${sidebarWidth}px` }"
     >
       <div
@@ -179,31 +179,33 @@ async function applyScenario(scenario: SimulationScenario): Promise<void> {
         title="Arrastrar para cambiar el ancho del panel"
         @mousedown="startSidebarResize"
       ></div>
+      <!-- Mobile drag handle -->
       <button
         type="button"
-        class="flex shrink-0 flex-col items-center gap-1 px-4 pb-2 pt-3 md:hidden"
+        class="flex shrink-0 flex-col items-center gap-1.5 px-4 pb-2 pt-3 md:hidden"
         @click="sheetOpen = !sheetOpen"
       >
-        <span class="h-1.5 w-12 rounded-full bg-base-content/25"></span>
-        <span class="text-xs font-semibold text-base-content/70">
-          {{ sheetOpen ? 'Ocultar panel ▾' : analysis ? 'Ver perfil y resumen ▴' : 'Perfil y carga de ruta ▴' }}
+        <span class="h-1 w-10 rounded-full bg-base-content/20"></span>
+        <span class="flex items-center gap-1.5 text-[11px] font-medium text-base-content/50">
+          <AppIcon :name="sheetOpen ? 'chevron-down' : 'chevron-up'" :size="12" />
+          {{ sheetOpen ? 'Ocultar panel' : analysis ? 'Perfil y resumen' : 'Perfil y carga' }}
         </span>
       </button>
 
-      <div class="flex items-center justify-between border-b border-base-100 p-5">
+      <div class="flex items-center justify-between border-b border-base-100 p-3 sm:p-5">
         <RouterLink to="/" class="group flex items-center gap-2" title="Volver al inicio">
           <span
-            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition group-hover:bg-primary/20"
+            class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition group-hover:bg-primary/20 sm:h-8 sm:w-8"
           >
-            <AppIcon name="mountain" :size="18" />
+            <AppIcon name="mountain" :size="16" />
           </span>
           <div>
             <h1
-              class="bg-gradient-to-r from-success to-primary bg-clip-text text-2xl font-extrabold tracking-tight text-transparent"
+              class="bg-gradient-to-r from-success to-primary bg-clip-text text-lg font-extrabold tracking-tight text-transparent sm:text-2xl"
             >
               RiskTrail
             </h1>
-            <p class="mt-0.5 text-xs text-base-content/60">Análisis de riesgo en senderismo</p>
+            <p class="hidden text-xs text-base-content/60 sm:block">Análisis de riesgo en senderismo</p>
           </div>
         </RouterLink>
         <div class="flex items-center gap-2">
@@ -214,11 +216,11 @@ async function applyScenario(scenario: SimulationScenario): Promise<void> {
           >
             <AppIcon :name="currentTheme === 'jic-dark' ? 'sun' : 'moon'" :size="18" />
           </button>
-          <div class="badge badge-success badge-outline text-xs">FE alpha</div>
+          <div class="badge badge-success badge-outline text-[10px] sm:text-xs">FE alpha</div>
         </div>
       </div>
 
-      <div class="flex-1 space-y-4 overflow-y-auto overscroll-contain p-4">
+      <div class="flex-1 space-y-3 overflow-y-auto overscroll-contain p-3 sm:space-y-4 sm:p-4">
         <HikerProfileForm v-model="profile" :is-valid="isValid()" :disabled="isLoading" />
 
         <FileUploader
@@ -228,7 +230,7 @@ async function applyScenario(scenario: SimulationScenario): Promise<void> {
           @analyze="analyzeRoute"
         />
 
-        <div v-if="error" class="alert alert-error text-xs shadow-md">
+        <div v-if="error" class="alert alert-error text-[11px] shadow-md sm:text-xs">
           <span>{{ error }}</span>
         </div>
 
@@ -274,50 +276,46 @@ async function applyScenario(scenario: SimulationScenario): Promise<void> {
         />
 
         <section v-if="selectedSegment" class="card bg-base-100 shadow-md">
-          <div class="card-body p-4 text-sm">
-            <div class="flex items-start justify-between gap-3">
+          <div class="card-body p-3 sm:p-4">
+            <div class="flex items-start justify-between gap-2">
               <div>
-                <h2 class="font-bold">Tramo #{{ selectedSegment.seq }}</h2>
-                <p class="text-xs text-base-content/60">{{ directionLabel(selectedSegment.direction) }}</p>
+                <h2 class="font-bold text-sm">Tramo #{{ selectedSegment.seq }}</h2>
+                <p class="text-[11px] text-base-content/60">{{ directionLabel(selectedSegment.direction) }}</p>
               </div>
-              <span class="badge" :class="selectedRiskClass">
-                Riesgo {{ selectedRiskLabel }} · {{ selectedSegment.risk_score }}/100
+              <span class="badge badge-sm" :class="selectedRiskClass">
+                {{ selectedRiskLabel }} · {{ selectedSegment.risk_score }}
               </span>
             </div>
 
-            <div class="mt-3 rounded-box bg-base-200 p-3 text-xs leading-relaxed text-base-content/70">
+            <div class="mt-2 rounded-box bg-base-200 p-2.5 text-[11px] leading-relaxed text-base-content/70 sm:mt-3 sm:text-xs">
               {{ selectedSegmentMeaning }}
             </div>
 
-            <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
+            <div class="mt-2 grid grid-cols-2 gap-1.5 text-[11px] sm:mt-3 sm:gap-2 sm:text-xs">
               <div class="rounded-box bg-base-200 p-2">
-                <span class="block text-base-content/50">Velocidad esperada</span>
+                <span class="block text-base-content/50">Velocidad</span>
                 <strong>{{ selectedSegment.velocity_kmh }} km/h</strong>
-                <p class="mt-1 text-base-content/50">Más bajo = tramo más lento.</p>
               </div>
               <div class="rounded-box bg-base-200 p-2">
                 <span class="block text-base-content/50">Pendiente</span>
                 <strong>{{ selectedSegment.slope_pct }}</strong>
-                <p class="mt-1 text-base-content/50">+ sube, - baja.</p>
               </div>
               <div class="rounded-box bg-base-200 p-2">
-                <span class="block text-base-content/50">Costo por metro</span>
+                <span class="block text-base-content/50">CoT</span>
                 <strong>{{ selectedSegment.cot_j_per_kg_m }} J/kg·m</strong>
-                <p class="mt-1 text-base-content/50">Energía por peso y distancia.</p>
               </div>
               <div class="rounded-box bg-base-200 p-2">
-                <span class="block text-base-content/50">Esfuerzo instantáneo</span>
+                <span class="block text-base-content/50">Esfuerzo</span>
                 <strong>{{ selectedSegment.metabolic_rate_w }} W</strong>
-                <p class="mt-1 text-base-content/50">Qué tan fuerte trabaja el cuerpo.</p>
               </div>
             </div>
 
-            <div class="mt-3 flex flex-wrap gap-2">
-              <span class="badge badge-ghost">Superficie: {{ selectedSegment.surface_type }}</span>
-              <span class="badge" :class="selectedSegment.is_on_path ? 'badge-success' : 'badge-warning'">
-                {{ selectedSegment.is_on_path ? 'sendero consolidado' : 'off-path' }}
+            <div class="mt-2 flex flex-wrap gap-1.5 sm:mt-3 sm:gap-2">
+              <span class="badge badge-ghost badge-sm">{{ selectedSegment.surface_type }}</span>
+              <span class="badge badge-sm" :class="selectedSegment.is_on_path ? 'badge-success' : 'badge-warning'">
+                {{ selectedSegment.is_on_path ? 'consolidado' : 'off-path' }}
               </span>
-              <span v-if="selectedSegment.is_eccentric_fatigue" class="badge badge-error">
+              <span v-if="selectedSegment.is_eccentric_fatigue" class="badge badge-error badge-sm">
                 bajada fatigante
               </span>
             </div>

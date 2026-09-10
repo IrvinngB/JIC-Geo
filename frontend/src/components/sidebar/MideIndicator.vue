@@ -24,19 +24,19 @@ function barColor(value: number): string {
 
 <template>
   <div v-if="dimensions" class="card bg-base-100 shadow-md">
-    <div class="card-body p-4">
-      <h2 class="card-title text-sm font-semibold uppercase tracking-wider text-base-content/60">
+    <div class="card-body p-3 sm:p-4">
+      <h2 class="card-title text-xs font-semibold uppercase tracking-wider text-base-content/60 sm:text-sm">
         Índice MIDE
       </h2>
-      <div class="mt-3 space-y-2">
+      <div class="mt-2 space-y-1.5 sm:mt-3 sm:space-y-2">
         <div
           v-for="(value, key) in dimensions"
           :key="key"
-          class="space-y-1"
+          class="space-y-0.5 sm:space-y-1"
         >
-          <div class="flex items-center justify-between text-xs">
+          <div class="flex items-center justify-between text-[11px] sm:text-xs">
             <span class="font-medium text-base-content/70">{{ labels[key as keyof MideDimensions] }}</span>
-            <span class="font-bold text-xs" :class="barColor(value).replace('bg-', 'text-')">{{ value }}/5</span>
+            <span class="font-bold text-[11px] sm:text-xs" :class="barColor(value).replace('bg-', 'text-')">{{ value }}/5</span>
           </div>
           <div class="flex items-center gap-2">
             <div class="flex-1 rounded-full bg-base-200 h-1.5 overflow-hidden">

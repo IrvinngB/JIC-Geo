@@ -85,3 +85,12 @@ html[data-theme="jic-dark"] ::-webkit-scrollbar-thumb:active {
 html[data-theme="jic-dark"] {
   scrollbar-color: #22c55e #111827;
 }
+
+/* Hide scrollbar but keep scroll functionality */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}

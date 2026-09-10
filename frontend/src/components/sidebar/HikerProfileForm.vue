@@ -11,13 +11,13 @@ const props = defineProps<{
 
 <template>
   <section class="card bg-base-100 shadow-md">
-    <div class="card-body p-4 gap-4">
+    <div class="card-body gap-3 p-3 sm:gap-4 sm:p-4">
       <div>
-        <h2 class="card-title text-sm font-semibold uppercase tracking-wider text-base-content/60">
+        <h2 class="card-title text-xs font-semibold uppercase tracking-wider text-base-content/60 sm:text-sm">
           Perfil del excursionista
         </h2>
-        <p class="mt-1 text-xs text-base-content/60">
-          Estos datos alimentan Pandolf y el ajuste de condición física.
+        <p class="mt-0.5 text-[11px] text-base-content/60 sm:mt-1 sm:text-xs">
+          Estos datos alimentan el modelo biomecánico.
         </p>
       </div>
 
