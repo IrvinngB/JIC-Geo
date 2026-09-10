@@ -3,6 +3,8 @@ import { ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import AppIcon from '@/components/icons/AppIcon.vue'
+import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -36,7 +38,7 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <div class="flex min-h-screen bg-base-100">
+  <div class="flex min-h-screen bg-base-200">
     <!-- Left: Branding -->
     <div class="relative hidden flex-1 items-center justify-center overflow-hidden lg:flex">
       <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-success/10 via-base-100 to-primary/5"></div>
@@ -45,7 +47,7 @@ async function handleSubmit() {
 
       <div class="relative z-10 max-w-md px-8 text-center">
         <AppIcon name="mountain" :size="48" class="mx-auto text-primary" />
-        <h1 class="mt-6 text-4xl font-extrabold tracking-tight">
+        <h1 class="mt-6 text-4xl font-extrabold tracking-tight text-base-content">
           <span class="bg-gradient-to-r from-success to-primary bg-clip-text text-transparent">RiskTrail</span>
         </h1>
         <p class="mt-4 text-base leading-relaxed text-base-content/60">
@@ -75,7 +77,7 @@ async function handleSubmit() {
     </div>
 
     <!-- Right: Form -->
-    <div class="flex w-full items-center justify-center px-6 py-12 sm:px-12 lg:w-[480px] lg:shrink-0">
+    <div class="flex w-full items-center justify-center bg-base-100 px-6 py-12 sm:px-12 lg:w-[480px] lg:shrink-0">
       <div class="w-full max-w-sm">
         <!-- Mobile header -->
         <div class="mb-8 text-center lg:hidden">
@@ -88,70 +90,51 @@ async function handleSubmit() {
         </div>
 
         <div>
-          <h2 class="text-2xl font-extrabold tracking-tight">Creá tu cuenta</h2>
+          <h2 class="text-2xl font-extrabold tracking-tight text-base-content">Creá tu cuenta</h2>
           <p class="mt-2 text-sm text-base-content/50">Empezá a analizar tus rutas en segundos</p>
         </div>
 
         <form class="mt-8 space-y-4" @submit.prevent="handleSubmit">
-          <label class="form-control">
-            <span class="label-text text-xs font-medium text-base-content/70">Nombre</span>
-            <input
-              v-model="name"
-              type="text"
-              placeholder="Tu nombre"
-              class="input input-bordered input-sm w-full sm:input-md"
-              required
-            />
-          </label>
+          <BaseInput
+            v-model="name"
+            label="Nombre"
+            placeholder="Tu nombre"
+            required
+          />
 
-          <label class="form-control">
-            <span class="label-text text-xs font-medium text-base-content/70">Email</span>
-            <input
-              v-model="email"
-              type="email"
-              placeholder="tu@email.com"
-              class="input input-bordered input-sm w-full sm:input-md"
-              required
-            />
-          </label>
+          <BaseInput
+            v-model="email"
+            label="Email"
+            type="email"
+            placeholder="tu@email.com"
+            required
+          />
 
-          <label class="form-control">
-            <span class="label-text text-xs font-medium text-base-content/70">Contraseña</span>
-            <input
-              v-model="password"
-              type="password"
-              placeholder="Mínimo 6 caracteres"
-              class="input input-bordered input-sm w-full sm:input-md"
-              minlength="6"
-              required
-            />
-          </label>
+          <BaseInput
+            v-model="password"
+            label="Contraseña"
+            type="password"
+            placeholder="Mínimo 6 caracteres"
+            minlength="6"
+            required
+          />
 
-          <label class="form-control">
-            <span class="label-text text-xs font-medium text-base-content/70">Confirmar contraseña</span>
-            <input
-              v-model="confirmPassword"
-              type="password"
-              placeholder="Repetí la contraseña"
-              class="input input-bordered input-sm w-full sm:input-md"
-              required
-            />
-          </label>
+          <BaseInput
+            v-model="confirmPassword"
+            label="Confirmar contraseña"
+            type="password"
+            placeholder="Repetí la contraseña"
+            required
+          />
 
           <div v-if="localError || auth.error" class="rounded-xl border border-error/30 bg-error/10 px-4 py-3 text-xs text-error">
             {{ localError || auth.error }}
           </div>
 
-          <button
-            type="submit"
-            class="btn btn-primary w-full gap-2 text-white"
-            :class="{ 'btn-disabled': auth.isLoading }"
-            :disabled="auth.isLoading"
-          >
-            <span v-if="auth.isLoading" class="loading loading-spinner loading-sm" />
-            <AppIcon v-else name="arrow-right" :size="16" />
+          <BaseButton type="submit" block :loading="auth.isLoading">
+            <AppIcon name="arrow-right" :size="16" />
             {{ auth.isLoading ? 'Creando cuenta...' : 'Crear cuenta' }}
-          </button>
+          </BaseButton>
         </form>
 
         <p class="mt-8 text-center text-xs text-base-content/40">
