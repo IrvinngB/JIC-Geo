@@ -61,6 +61,7 @@ const authors = [
     role: 'Full Stack & Arquitectura',
     github: 'https://github.com/IrvinngB',
     githubUser: 'IrvinngB',
+    portfolio: 'https://irvincodes.dev/',
     avatar: 'https://avatars.githubusercontent.com/u/157191495',
   },
   {
@@ -68,11 +69,12 @@ const authors = [
     role: 'Backend',
     github: 'https://github.com/kelvinhe04',
     githubUser: 'kelvinhe04',
+    portfolio: 'https://kelvin-he.netlify.app/',
     avatar: 'https://avatars.githubusercontent.com/u/91310516',
   },
   {
     name: 'Roy Barrera',
-    role: 'Frontend',
+    role: 'Backend & Database',
     github: 'https://github.com/Roy-x24',
     githubUser: 'Roy-x24',
     avatar: 'https://ui-avatars.com/api/?name=Roy+Barrera&background=random',
@@ -292,6 +294,10 @@ const authors = [
             <a :href="author.github" target="_blank" class="mt-3 inline-flex items-center gap-1.5 text-xs text-primary hover:underline">
               <AppIcon name="github" :size="14" />
               @{{ author.githubUser }}
+            </a>
+            <a v-if="author.portfolio" :href="author.portfolio" target="_blank" class="mt-1 inline-flex items-center gap-1.5 text-xs text-base-content/40 hover:text-primary hover:underline">
+              <AppIcon name="globe" :size="12" />
+              Portfolio
             </a>
           </div>
         </div>
