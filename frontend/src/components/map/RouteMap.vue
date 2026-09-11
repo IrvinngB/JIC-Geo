@@ -151,7 +151,20 @@ function updateGpsPosition(pos: { lat: number; lng: number }) {
   if (map) {
     if (!gpsMarker) {
       const el = document.createElement('div')
-      el.innerHTML = `<div style="width:16px;height:16px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 4px rgba(34,197,94,0.3),0 2px 8px rgba(0,0,0,0.3);"></div>`
+      el.style.cssText = 'width:36px;height:36px;position:relative;'
+      el.innerHTML = `
+        <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Outer pulse ring -->
+          <circle cx="18" cy="18" r="16" stroke="#22c55e" stroke-width="2" fill="none" opacity="0.3">
+            <animate attributeName="r" values="12;16;12" dur="2s" repeatCount="indefinite"/>
+            <animate attributeName="opacity" values="0.4;0.1;0.4" dur="2s" repeatCount="indefinite"/>
+          </circle>
+          <!-- Inner filled circle -->
+          <circle cx="18" cy="18" r="8" fill="#22c55e" stroke="white" stroke-width="2.5"/>
+          <!-- Center dot -->
+          <circle cx="18" cy="18" r="2.5" fill="white"/>
+        </svg>
+      `
       gpsMarker = new maplibregl.Marker({ element: el, anchor: 'center' })
         .setLngLat([pos.lng, pos.lat])
         .addTo(map)
