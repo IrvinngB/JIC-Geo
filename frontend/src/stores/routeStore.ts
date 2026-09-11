@@ -98,6 +98,11 @@ interface ProcessResponse {
   points_corrected: number;
   segments: Array<{
     seq: number;
+    length_m?: number;
+    elevation_start?: number;
+    elevation_end?: number;
+    slope_pct?: number;
+    direction?: string;
     elevation_interpolated?: boolean;
   }>;
 }
@@ -320,6 +325,11 @@ export const useRouteStore = defineStore("route", () => {
         ]),
       );
 
+      // Build lookup for elevation data from processed segments
+      const processedBySeq = new Map(
+        processed.segments.map((segment) => [segment.seq, segment]),
+      );
+
       analysis.value = {
         route_id: upload.route_id,
         route_name: upload.name,
@@ -346,9 +356,17 @@ export const useRouteStore = defineStore("route", () => {
           precip_mm: biomechanical.summary.precip_mm,
           uv_index: biomechanical.summary.uv_index,
         },
-        segments: biomechanical.segments.map((segment) =>
-          mapBackendSegment(segment, interpolatedBySeq),
-        ),
+        segments: biomechanical.segments.map((segment) => {
+          const mapped = mapBackendSegment(segment, interpolatedBySeq);
+          // Merge elevation data from processed segments
+          const processed = processedBySeq.get(segment.seq);
+          if (processed) {
+            mapped.length_m = processed.length_m;
+            mapped.elevation_start = processed.elevation_start;
+            mapped.elevation_end = processed.elevation_end;
+          }
+          return mapped;
+        }),
       };
       isSimulationMode.value = false;
     } catch (err) {
