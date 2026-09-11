@@ -26,6 +26,18 @@ const router = createRouter({
       component: () => import('../views/MapView.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      path: '/perfiles',
+      name: 'profiles',
+      component: () => import('../views/ProfilesView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/historial',
+      name: 'history',
+      component: () => import('../views/HistoryView.vue'),
+      meta: { requiresAuth: true },
+    },
   ],
 })
 

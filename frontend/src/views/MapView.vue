@@ -543,6 +543,16 @@ const trailPhotoUrl =
 
       <!-- Center / Right Links & Actions -->
       <div class="flex items-center gap-3 sm:gap-4">
+        <!-- Navigation links -->
+        <nav class="hidden items-center gap-1 sm:flex">
+          <RouterLink to="/perfiles" class="btn btn-ghost btn-xs text-base-content/50 hover:text-base-content gap-1">
+            <AppIcon name="footprints" :size="12" /> Perfiles
+          </RouterLink>
+          <RouterLink to="/historial" class="btn btn-ghost btn-xs text-base-content/50 hover:text-base-content gap-1">
+            <AppIcon name="file-text" :size="12" /> Historial
+          </RouterLink>
+        </nav>
+
         <!-- Quick PDF export button in navbar when analysis is ready -->
         <button
           v-if="analysis"
