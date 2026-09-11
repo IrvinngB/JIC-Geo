@@ -110,12 +110,8 @@ const gpsRiskTextColor = computed(() => {
 })
 
 const gpsMarkerStyle = computed(() => {
-  if (!gpsPosition.value || !map) return { display: 'none' }
-  const point = map.project([gpsPosition.value.lng, gpsPosition.value.lat])
-  return {
-    left: `${point.x - 8}px`,
-    top: `${point.y - 8}px`,
-  }
+  // Not used — MapLibre marker handles positioning
+  return {}
 })
 
 function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -154,7 +150,9 @@ function updateGpsPosition(pos: { lat: number; lng: number }) {
 
   if (map) {
     if (!gpsMarker) {
-      gpsMarker = new maplibregl.Marker({ element: document.createElement('div') })
+      const el = document.createElement('div')
+      el.innerHTML = `<div style="width:16px;height:16px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 4px rgba(34,197,94,0.3),0 2px 8px rgba(0,0,0,0.3);"></div>`
+      gpsMarker = new maplibregl.Marker({ element: el, anchor: 'center' })
         .setLngLat([pos.lng, pos.lat])
         .addTo(map)
     } else {
@@ -344,7 +342,7 @@ watch(
 function buildMapStyle(baseMap: BaseMapOption): StyleSpecification {
   return {
     version: 8,
-    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+    glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
     sources: {
       'base-raster': {
         type: 'raster',
@@ -815,20 +813,7 @@ function buildPopupHTML(segment: RouteAnalysis['segments'][number]): string {
       <AppIcon :name="gpsTracking ? 'compass' : 'map'" :size="18" />
     </button>
 
-    <!-- GPS Position Marker -->
-    <div
-      v-if="gpsPosition"
-      class="absolute z-20 pointer-events-none"
-      :style="gpsMarkerStyle"
-    >
-      <div class="relative">
-        <div class="h-4 w-4 rounded-full bg-primary shadow-lg ring-4 ring-primary/30 animate-pulse"></div>
-        <div class="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-base-100/95 px-2.5 py-1 text-[10px] font-bold shadow-lg backdrop-blur">
-          <span v-if="gpsNearestSeq !== null" class="text-primary">Tramo #{{ gpsNearestSeq }}</span>
-          <span v-else class="text-base-content/50">Fuera de ruta</span>
-        </div>
-      </div>
-    </div>
+    <!-- GPS Position Marker (handled by MapLibre marker) -->
 
     <!-- GPS Risk Badge (shown when tracking and on a segment) -->
     <div
