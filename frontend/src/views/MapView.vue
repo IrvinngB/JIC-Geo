@@ -11,6 +11,7 @@ import ClimateSliders from '@/components/simulation/ClimateSliders.vue'
 import ClimateToggle from '@/components/simulation/ClimateToggle.vue'
 import RoutePlanner from '@/components/routing/RoutePlanner.vue'
 import AppIcon, { type IconName } from '@/components/icons/AppIcon.vue'
+import ElevationProfile from '@/components/map/ElevationProfile.vue'
 import RouteReportTemplate from '@/components/report/RouteReportTemplate.vue'
 import { exportElementAsPdf, buildReportFilename } from '@/utils/pdfExport'
 import { useHikerProfile } from '@/composables/useHikerProfile'
@@ -1162,6 +1163,19 @@ const trailPhotoUrl =
                 >
                   <AppIcon name="maximize-2" :size="18" />
                 </button>
+              </div>
+
+              <!-- Elevation Profile -->
+              <div v-if="analysis" class="relative rounded-2xl border border-base-200 bg-base-100 p-4 shadow-xs">
+                <div class="mb-2 flex items-center justify-between">
+                  <h3 class="text-xs font-bold text-base-content/60">Perfil altimétrico</h3>
+                  <span class="text-[10px] text-base-content/40">Tocá un tramo para ver detalles</span>
+                </div>
+                <ElevationProfile
+                  :analysis="analysis"
+                  :selected-seq="selectedSegment?.seq ?? null"
+                  @select-segment="routeStore.selectSegment"
+                />
               </div>
 
               <!-- 4 Metric Cards (100% REALES del backend) -->

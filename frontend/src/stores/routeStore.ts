@@ -50,6 +50,9 @@ export interface ClimateFactors {
 
 export interface Segment {
   seq: number;
+  length_m?: number;
+  elevation_start?: number;
+  elevation_end?: number;
   slope_pct: number;
   direction: "ascent" | "descent" | "flat";
   velocity_kmh: number;
