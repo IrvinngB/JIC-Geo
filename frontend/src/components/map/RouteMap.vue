@@ -54,6 +54,7 @@ const props = defineProps<{
   routingEnd: number | null
   routingWaypoints: number[]
   optimalPathFeatures: FeatureCollection<LineString> | null
+  hideSegments?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -80,6 +81,133 @@ const visibleSegments = computed(() => props.analysis?.segments ?? [])
 
 const showEmptyPrompt = ref(true)
 let emptyPromptTimer: ReturnType<typeof setTimeout> | null = null
+let resizeObserver: ResizeObserver | null = null
+
+// ── GPS Tracking ──
+const gpsTracking = ref(false)
+const gpsPosition = ref<{ lat: number; lng: number } | null>(null)
+const gpsNearestSeq = ref<number | null>(null)
+const gpsRiskScore = ref<number | null>(null)
+let gpsWatchId: number | null = null
+let gpsMarker: maplibregl.Marker | null = null
+
+const gpsRiskColor = computed(() => {
+  const s = gpsRiskScore.value ?? 0
+  if (s >= 80) return 'bg-purple-500'
+  if (s >= 60) return 'bg-red-500'
+  if (s >= 40) return 'bg-orange-500'
+  if (s >= 20) return 'bg-yellow-500'
+  return 'bg-green-500'
+})
+
+const gpsRiskTextColor = computed(() => {
+  const s = gpsRiskScore.value ?? 0
+  if (s >= 80) return 'text-purple-600'
+  if (s >= 60) return 'text-red-600'
+  if (s >= 40) return 'text-orange-600'
+  if (s >= 20) return 'text-yellow-600'
+  return 'text-green-600'
+})
+
+const gpsMarkerStyle = computed(() => {
+  if (!gpsPosition.value || !map) return { display: 'none' }
+  const point = map.project([gpsPosition.value.lng, gpsPosition.value.lat])
+  return {
+    left: `${point.x - 8}px`,
+    top: `${point.y - 8}px`,
+  }
+})
+
+function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLng = ((lng2 - lng1) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+function findNearestSegment(lat: number, lng: number): number | null {
+  if (!props.analysis?.segments) return null
+  let bestSeq: number | null = null
+  let bestDist = Infinity
+  for (const seg of props.analysis.segments) {
+    if (!seg.geom?.coordinates) continue
+    for (const coord of seg.geom.coordinates) {
+      const [cLng, cLat] = coord
+      const dist = haversineDistance(lat, lng, cLat, cLng)
+      if (dist < bestDist) {
+        bestDist = dist
+        bestSeq = seg.seq
+      }
+    }
+  }
+  // Only return if within 100m of the route
+  return bestDist <= 100 ? bestSeq : null
+}
+
+function updateGpsPosition(pos: { lat: number; lng: number }) {
+  gpsPosition.value = { lat: pos.lat, lng: pos.lng }
+
+  if (map) {
+    if (!gpsMarker) {
+      gpsMarker = new maplibregl.Marker({ element: document.createElement('div') })
+        .setLngLat([pos.lng, pos.lat])
+        .addTo(map)
+    } else {
+      gpsMarker.setLngLat([pos.lng, pos.lat])
+    }
+  }
+
+  const nearestSeq = findNearestSegment(pos.lat, pos.lng)
+  gpsNearestSeq.value = nearestSeq
+
+  if (nearestSeq !== null) {
+    const seg = props.analysis?.segments.find((s) => s.seq === nearestSeq)
+    gpsRiskScore.value = seg?.risk_score ?? null
+  } else {
+    gpsRiskScore.value = null
+  }
+}
+
+function toggleGps() {
+  if (gpsTracking.value) {
+    stopGps()
+  } else {
+    startGps()
+  }
+}
+
+function startGps() {
+  if (!navigator.geolocation) return
+  gpsTracking.value = true
+  gpsWatchId = navigator.geolocation.watchPosition(
+    (pos) =>
+      updateGpsPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+    () => {
+      gpsTracking.value = false
+    },
+    { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 },
+  )
+}
+
+function stopGps() {
+  if (gpsWatchId !== null) {
+    navigator.geolocation.clearWatch(gpsWatchId)
+    gpsWatchId = null
+  }
+  gpsTracking.value = false
+  gpsPosition.value = null
+  gpsNearestSeq.value = null
+  gpsRiskScore.value = null
+  if (gpsMarker) {
+    gpsMarker.remove()
+    gpsMarker = null
+  }
+}
 
 onMounted(() => {
   if (!mapContainer.value) return
@@ -114,9 +242,22 @@ onMounted(() => {
       activePopup = null
     }
   })
+
+  // Watch for container size changes to resize map canvas reliably
+  if (typeof ResizeObserver !== 'undefined' && mapContainer.value) {
+    resizeObserver = new ResizeObserver(() => {
+      map?.resize()
+    })
+    resizeObserver.observe(mapContainer.value)
+  }
 })
 
 onBeforeUnmount(() => {
+  stopGps()
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+    resizeObserver = null
+  }
   if (emptyPromptTimer) {
     clearTimeout(emptyPromptTimer)
     emptyPromptTimer = null
@@ -396,8 +537,9 @@ function renderRouteLayer(): void {
         type: 'symbol',
         source: 'risk-warnings',
         layout: {
-          'text-field': '⚠',
+          'text-field': '!',
           'text-size': 16,
+          'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
           'text-anchor': 'center',
           'text-offset': [0, -0.8],
         },
@@ -419,6 +561,8 @@ function renderRouteLayer(): void {
 function fitToFeatures(data: FeatureCollection<LineString>): void {
   if (!map || data.features.length === 0) return
 
+  map.resize()
+
   const bounds = new maplibregl.LngLatBounds()
   for (const feature of data.features) {
     for (const coordinate of feature.geometry.coordinates) {
@@ -428,14 +572,16 @@ function fitToFeatures(data: FeatureCollection<LineString>): void {
 
   if (!bounds.isEmpty()) {
     const isMobile = window.innerWidth < 640
+    const padding = props.hideSegments
+      ? (isMobile ? { top: 25, bottom: 25, left: 20, right: 20 } : { top: 40, bottom: 40, left: 40, right: 40 })
+      : (isMobile ? { top: 30, bottom: 90, left: 20, right: 20 } : { top: 50, bottom: 50, left: 60, right: 60 })
+
     map.fitBounds(bounds, {
-      padding: isMobile
-        ? { top: 60, bottom: 100, left: 20, right: 20 }
-        : { top: 90, bottom: 280, left: 60, right: 90 },
-      maxZoom: terrainEnabled.value ? 14 : 15,
-      pitch: terrainEnabled.value ? 62 : 0,
-      bearing: terrainEnabled.value ? -25 : 0,
-      duration: 900,
+      padding,
+      maxZoom: 16,
+      pitch: terrainEnabled.value ? 55 : 0,
+      bearing: terrainEnabled.value ? -20 : 0,
+      duration: 800,
     })
   }
 }
@@ -590,7 +736,9 @@ function buildPopupHTML(segment: RouteAnalysis['segments'][number]): string {
   const dir = segment.direction === 'ascent' ? 'Subida' : segment.direction === 'descent' ? 'Bajada' : 'Plano'
   const badgeColor = segment.risk_score >= 80 ? '#a855f7' : segment.risk_score >= 60 ? '#ef4444' : segment.risk_score >= 40 ? '#f97316' : segment.risk_score >= 20 ? '#eab308' : '#22c55e'
   const badgeBg = segment.risk_score >= 80 ? 'rgba(168,85,247,0.15)' : segment.risk_score >= 60 ? 'rgba(239,68,68,0.15)' : segment.risk_score >= 40 ? 'rgba(249,115,22,0.15)' : segment.risk_score >= 20 ? 'rgba(234,179,8,0.15)' : 'rgba(34,197,94,0.15)'
-  const topRisk = segment.is_top_risk ? '<div style="color: #ef4444; font-size: 11px; font-weight: 600; margin-top: 6px;">⚠ Top 10% de riesgo</div>' : ''
+  const topRisk = segment.is_top_risk
+    ? '<div style="color: #ef4444; font-size: 11px; font-weight: 600; margin-top: 6px; display: flex; align-items: center; gap: 4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>Top 10% de riesgo</div>'
+    : ''
   const ecc = segment.is_eccentric_fatigue ? '<div style="color: #ef4444; font-size: 10px; margin-top: 4px;">Bajada fatigante</div>' : ''
   return `
     <div style="font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px; min-width: 200px; color: #e2e8f0;">
@@ -657,6 +805,46 @@ function buildPopupHTML(segment: RouteAnalysis['segments'][number]): string {
       </button>
     </div>
 
+    <!-- GPS Location Button -->
+    <button
+      class="absolute right-3 top-[140px] z-10 flex h-10 w-10 items-center justify-center rounded-xl border border-base-300/60 bg-base-100/95 shadow-xl backdrop-blur transition-all hover:scale-105 hover:shadow-2xl sm:right-4 sm:top-[160px]"
+      :class="gpsTracking ? 'border-primary/40 bg-primary/10 text-primary' : 'text-base-content/60 hover:text-base-content'"
+      :title="gpsTracking ? 'Detener seguimiento' : '¿Dónde estoy?'"
+      @click="toggleGps"
+    >
+      <AppIcon :name="gpsTracking ? 'compass' : 'map'" :size="18" />
+    </button>
+
+    <!-- GPS Position Marker -->
+    <div
+      v-if="gpsPosition"
+      class="absolute z-20 pointer-events-none"
+      :style="gpsMarkerStyle"
+    >
+      <div class="relative">
+        <div class="h-4 w-4 rounded-full bg-primary shadow-lg ring-4 ring-primary/30 animate-pulse"></div>
+        <div class="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-base-100/95 px-2.5 py-1 text-[10px] font-bold shadow-lg backdrop-blur">
+          <span v-if="gpsNearestSeq !== null" class="text-primary">Tramo #{{ gpsNearestSeq }}</span>
+          <span v-else class="text-base-content/50">Fuera de ruta</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- GPS Risk Badge (shown when tracking and on a segment) -->
+    <div
+      v-if="gpsTracking && gpsRiskScore !== null"
+      class="absolute left-3 top-3 z-20 flex items-center gap-2 rounded-xl border border-base-200 bg-base-100/95 px-3 py-2 shadow-xl backdrop-blur sm:left-4 sm:top-4"
+    >
+      <div
+        class="h-3 w-3 rounded-full"
+        :class="gpsRiskColor"
+      ></div>
+      <div>
+        <div class="text-[10px] font-bold text-base-content/60">Riesgo actual</div>
+        <div class="text-sm font-black" :class="gpsRiskTextColor">{{ gpsRiskScore }}/100</div>
+      </div>
+    </div>
+
     <Transition
       enter-active-class="transition-opacity duration-300 ease-out"
       leave-active-class="transition-opacity duration-500 ease-in"
@@ -689,7 +877,7 @@ function buildPopupHTML(segment: RouteAnalysis['segments'][number]): string {
             title="Cerrar aviso"
             @click="showEmptyPrompt = false"
           >
-            ✕
+            <AppIcon name="x" :size="14" />
           </button>
         </div>
       </div>
@@ -711,7 +899,7 @@ function buildPopupHTML(segment: RouteAnalysis['segments'][number]): string {
 
     <!-- Segment list — horizontal strip on mobile, panel on desktop -->
     <div
-      v-if="props.analysis"
+      v-if="props.analysis && !props.hideSegments"
       class="absolute bottom-3 left-3 right-3 z-10 rounded-xl bg-base-100/95 shadow-xl backdrop-blur sm:bottom-4 sm:left-4 sm:right-auto sm:w-96 sm:rounded-box sm:p-3"
     >
       <!-- Mobile: compact horizontal scroll -->
