@@ -176,13 +176,42 @@ function updateGpsPosition(pos: { lat: number; lng: number }) {
   const nearestSeq = findNearestSegment(pos.lat, pos.lng)
   gpsNearestSeq.value = nearestSeq
 
+  const prevRisk = gpsRiskScore.value
   if (nearestSeq !== null) {
     const seg = props.analysis?.segments.find((s) => s.seq === nearestSeq)
     gpsRiskScore.value = seg?.risk_score ?? null
   } else {
     gpsRiskScore.value = null
   }
+
+  // Alert on entering danger zone (risk >= 60)
+  if (gpsRiskScore.value !== null && gpsRiskScore.value >= 60 && prevRisk !== gpsRiskScore.value) {
+    triggerDangerAlert(gpsRiskScore.value)
+  }
 }
+
+let lastAlertTime = 0
+function triggerDangerAlert(risk: number) {
+  // Vibration feedback (if supported)
+  if (navigator.vibrate) {
+    if (risk >= 80) {
+      navigator.vibrate([200, 100, 200]) // Double pulse for extreme
+    } else {
+      navigator.vibrate(150) // Single pulse for high
+    }
+  }
+  lastAlertTime = Date.now()
+}
+
+const gpsAlertActive = computed(() => {
+  return gpsTracking.value && gpsRiskScore.value !== null && gpsRiskScore.value >= 60
+})
+
+const gpsAlertLevel = computed(() => {
+  const s = gpsRiskScore.value ?? 0
+  if (s >= 80) return 'extreme'
+  return 'high'
+})
 
 function toggleGps() {
   if (gpsTracking.value) {
@@ -780,6 +809,31 @@ function buildPopupHTML(segment: RouteAnalysis['segments'][number]): string {
 <template>
   <section class="relative h-full w-full bg-base-300">
     <div ref="mapContainer" class="h-full w-full"></div>
+
+    <!-- Danger Alert Banner -->
+    <Transition
+      enter-active-class="transition-all duration-300 ease-out"
+      leave-active-class="transition-all duration-200 ease-in"
+      enter-from-class="-translate-y-full opacity-0"
+      leave-to-class="-translate-y-full opacity-0"
+    >
+      <div
+        v-if="gpsAlertActive"
+        class="absolute left-0 right-0 top-0 z-30 flex items-center justify-center gap-3 px-4 py-3 shadow-lg"
+        :class="gpsAlertLevel === 'extreme'
+          ? 'bg-gradient-to-r from-red-600 to-purple-600 text-white'
+          : 'bg-gradient-to-r from-orange-500 to-red-500 text-white'"
+      >
+        <AppIcon name="alert-triangle" :size="20" />
+        <span class="text-sm font-bold">
+          {{ gpsAlertLevel === 'extreme'
+            ? '⚠ RIESGO EXTREMO — Tramo #' + gpsNearestSeq
+            : '⚠ ZONA PELIGROSA — Tramo #' + gpsNearestSeq
+          }}
+        </span>
+        <span class="text-xs opacity-80">Riesgo {{ gpsRiskScore }}/100</span>
+      </div>
+    </Transition>
 
     <!-- Base map control -->
     <div class="absolute right-3 top-3 z-10 w-44 rounded-xl bg-base-100/95 p-2.5 shadow-xl backdrop-blur sm:right-4 sm:w-64 sm:p-3">
