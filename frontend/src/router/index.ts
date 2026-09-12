@@ -27,6 +27,12 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/mapa/nueva',
+      name: 'map-new',
+      component: () => import('../views/UploadFormView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/perfiles',
       name: 'profiles',
       component: () => import('../views/ProfilesView.vue'),

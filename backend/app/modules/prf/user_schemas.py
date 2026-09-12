@@ -61,3 +61,9 @@ class UserProfileResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def convert_uuid(cls, v):
+        from uuid import UUID
+        return str(v) if isinstance(v, UUID) else v

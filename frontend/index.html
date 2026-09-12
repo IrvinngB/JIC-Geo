@@ -6,19 +6,27 @@
     <meta name="description" content="Índice Dinámico de Riesgo para senderismo — análisis de rutas con datos biomecánicos y climáticos en tiempo real." />
     <title>RiskTrail — Índice de Riesgo en Senderismo</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <script>
+      /* Set theme BEFORE first paint — avoids flash of wrong theme */
+      (function() {
+        var saved = localStorage.getItem('theme');
+        var theme = saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'jic-dark' : 'jic-light');
+        document.documentElement.setAttribute('data-theme', theme);
+      })();
+    </script>
     <style>
-      /* FORCE scrollbar styles with !important */
-      ::-webkit-scrollbar { width: 14px !important; height: 14px !important; }
-      ::-webkit-scrollbar-track { background: #111827 !important; border-radius: 9999px !important; }
-      ::-webkit-scrollbar-thumb { background: #22c55e !important; border-radius: 9999px !important; min-height: 40px !important; }
-      ::-webkit-scrollbar-thumb:hover { background: #4ade80 !important; }
-      ::-webkit-scrollbar-thumb:active { background: #4ade80 !important; }
+      /* Scrollbar — light theme (default) */
+      ::-webkit-scrollbar { width: 6px !important; height: 6px !important; }
+      ::-webkit-scrollbar-track { background: #f1f5f9 !important; border-radius: 9999px !important; }
+      ::-webkit-scrollbar-thumb { background: #2d6a4f !important; border-radius: 9999px !important; min-height: 40px !important; }
+      ::-webkit-scrollbar-thumb:hover { background: #16a34a !important; }
       ::-webkit-scrollbar-button { display: none !important; height: 0 !important; width: 0 !important; }
-      * { scrollbar-width: thin !important; scrollbar-color: #22c55e #111827 !important; }
-      html[data-theme="jic-dark"] ::-webkit-scrollbar-track { background: #111827 !important; border-radius: 9999px !important; }
-      html[data-theme="jic-dark"] ::-webkit-scrollbar-thumb { background: #22c55e !important; border-radius: 9999px !important; }
+      * { scrollbar-width: thin !important; scrollbar-color: #2d6a4f #f1f5f9 !important; }
+
+      /* Scrollbar — dark theme override */
+      html[data-theme="jic-dark"] ::-webkit-scrollbar-track { background: #111827 !important; }
+      html[data-theme="jic-dark"] ::-webkit-scrollbar-thumb { background: #22c55e !important; }
       html[data-theme="jic-dark"] ::-webkit-scrollbar-thumb:hover { background: #4ade80 !important; }
-      html[data-theme="jic-dark"] ::-webkit-scrollbar-thumb:active { background: #4ade80 !important; }
       html[data-theme="jic-dark"] { scrollbar-color: #22c55e #111827 !important; }
     </style>
   </head>

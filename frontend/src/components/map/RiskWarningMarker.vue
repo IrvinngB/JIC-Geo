@@ -46,8 +46,9 @@ function renderLayer() {
       type: 'symbol',
       source: 'risk-warnings',
       layout: {
-        'text-field': '⚠',
+        'text-field': '!',
         'text-size': 18,
+        'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
         'text-anchor': 'center',
         'text-offset': [0, -0.5],
       },

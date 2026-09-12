@@ -12,6 +12,17 @@ export default defineConfig({
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'maplibre': ['maplibre-gl'],
+          'vendor': ['vue', 'vue-router', 'pinia'],
+          'pdf': ['jspdf', 'html2canvas'],
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     allowedHosts: ["risktrail.irvincodes.dev", ".irvincodes.dev", "localhost"],

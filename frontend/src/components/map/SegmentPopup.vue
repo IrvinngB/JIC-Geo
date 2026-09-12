@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Segment } from '@/stores/routeStore'
+import AppIcon from '@/components/icons/AppIcon.vue'
 
 const props = defineProps<{
   segment: Segment
@@ -55,8 +56,9 @@ function riskBadgeClass(score: number): string {
       </div>
     </div>
     
-    <div v-if="segment.is_top_risk" class="mt-2 flex items-center gap-1 text-xs text-error font-semibold">
-      <span>⚠</span> Top 10% de riesgo
+    <div v-if="segment.is_top_risk" class="mt-2 flex items-center gap-1.5 text-xs text-error font-semibold">
+      <AppIcon name="alert-triangle" :size="13" class="shrink-0" />
+      <span>Top 10% de riesgo</span>
     </div>
     
     <div class="mt-2 pt-2 border-t border-base-200 flex justify-between items-center">

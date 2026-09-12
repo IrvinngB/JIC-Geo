@@ -1,8 +1,9 @@
 """Pydantic schemas for route history endpoints."""
 
 from datetime import datetime
+from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class HistoryCreate(BaseModel):
@@ -29,10 +30,20 @@ class HistorySummary(BaseModel):
 
     model_config = {"from_attributes": True}
 
+    @field_validator("id", mode="before")
+    @classmethod
+    def convert_uuid(cls, v):
+        return str(v) if isinstance(v, UUID) else v
+
 
 class HistoryDetail(HistorySummary):
     profile_id: str | None
     analysis_json: str
+
+    @field_validator("profile_id", mode="before")
+    @classmethod
+    def convert_profile_uuid(cls, v):
+        return str(v) if isinstance(v, UUID) else v
 
 
 class HistoryUpdateFavorite(BaseModel):

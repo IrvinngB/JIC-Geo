@@ -10,7 +10,7 @@ import FileUploader from '@/components/upload/FileUploader.vue'
 import ClimateSliders from '@/components/simulation/ClimateSliders.vue'
 import ClimateToggle from '@/components/simulation/ClimateToggle.vue'
 import RoutePlanner from '@/components/routing/RoutePlanner.vue'
-import AppIcon, { type IconName } from '@/components/icons/AppIcon.vue'
+import AppIcon from '@/components/icons/AppIcon.vue'
 import ElevationProfile from '@/components/map/ElevationProfile.vue'
 import RouteReportTemplate from '@/components/report/RouteReportTemplate.vue'
 import { exportElementAsPdf, buildReportFilename } from '@/utils/pdfExport'
@@ -24,14 +24,12 @@ import { useHistoryStore } from '@/stores/historyStore'
 import type { ClimateOverride, SimulationScenario } from '@/stores/routeStore'
 import type { HikerProfile } from '@/composables/useHikerProfile'
 import { formatNumber, formatDurationHours } from '@/utils/formatters'
-import sampleGpxRaw from '@/assets/sample-route.gpx?raw'
 
 interface RouteMapInstance {
   captureImage: () => string | null
 }
 
 const routeMapRef = ref<RouteMapInstance | null>(null)
-const formFileInputRef = ref<HTMLInputElement | null>(null)
 
 const { currentTheme, toggleTheme } = useTheme()
 const auth = useAuthStore()
@@ -53,16 +51,16 @@ const {
 
 const historyStore = useHistoryStore()
 
-// Navigation state: Form Page vs Trail Detail View
-const showUploadForm = ref(!analysis.value)
+// Redirect to form if no analysis
+if (!analysis.value) {
+  router.push('/mapa/nueva')
+}
 
 // Trail Detail tabs
-type PageTab = 'resumen' | 'condiciones' | 'mide' | 'analysis'
+type PageTab = 'resumen' | 'detalles' | 'ruta'
 const activeTab = ref<PageTab>('resumen')
 
-// File upload state in the form
-const selectedFile = ref<File | null>(null)
-const isDragging = ref(false)
+// File upload state moved to UploadFormView
 
 const routePlanner = useRoutePlanner()
 const {
@@ -100,44 +98,12 @@ const simulationMode = computed({
 
 
 
-// Form helpers & file handlers
-function triggerBrowseFile(): void {
-  formFileInputRef.value?.click()
-}
-
-function onFormFileChange(event: Event): void {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (file) {
-    selectedFile.value = file
-  }
-  input.value = ''
-}
-
-function onDropFile(event: DragEvent): void {
-  event.preventDefault()
-  isDragging.value = false
-  const file = event.dataTransfer?.files[0]
-  if (file) {
-    selectedFile.value = file
-  }
-}
-
-function loadDemoRoute(): void {
-  const blob = new Blob([sampleGpxRaw], { type: 'application/gpx+xml' })
-  selectedFile.value = new File(
-    [blob],
-    'ciudad-panama-cerro-ancon-sendero-el-mirador-panama.gpx',
-    { type: 'application/gpx+xml' }
-  )
-}
-
-async function handleFormSubmit(): Promise<void> {
-  if (!selectedFile.value || !isValid() || isLoading.value) return
+// Form submit handler (receives File from UploadFormView)
+async function handleFormSubmit(file: File): Promise<void> {
+  if (!isValid() || isLoading.value) return
   savedToHistory.value = false
   try {
-    await routeStore.uploadAndAnalyze(selectedFile.value, { ...profile })
-    showUploadForm.value = false
+    await routeStore.uploadAndAnalyze(file, { ...profile })
     activeTab.value = 'resumen'
     // Auto-save to history if authenticated
     if (auth.isAuthenticated && analysis.value) {
@@ -156,7 +122,7 @@ async function saveToHistory(): Promise<void> {
   isSaving.value = true
   try {
     await historyStore.saveAnalysis({
-      route_name: analysis.value.route_name ?? selectedFile.value?.name ?? undefined,
+      route_name: analysis.value.route_name ?? undefined,
       route_id: analysis.value.route_id,
       source_format: analysis.value.source_format ?? undefined,
       analysis_json: JSON.stringify(analysis.value),
@@ -282,79 +248,9 @@ const surfaceTypeLabel = computed(() => {
   }
 })
 
-const estimatedKcal = computed(() => {
-  const mass = totalMass.value
-  const factor = profile.surface_type === 'mud' || profile.surface_type === 'sand' ? 1.3 : 1.0
-  // Standard Minetti baseline approx 4.8 kcal/kg per 10km mountain trek
-  return Math.round(mass * 4.8 * 8.5 * factor)
-})
+// estimatedKcal, preliminaryMide, preliminaryMideLabel, precalcAdvice → moved to UploadFormView
 
-const preliminaryMide = computed(() => {
-  let score = 2
-  if (profile.load_kg > 12) score += 1
-  if (profile.fitness_level === 'low') score += 1
-  if (profile.fitness_level === 'athlete') score -= 1
-  if (profile.surface_type === 'mud' || profile.surface_type === 'dense_scrub') score += 1
-  return Math.min(5, Math.max(1, score))
-})
-
-const preliminaryMideLabel = computed(() => {
-  const s = preliminaryMide.value
-  if (s <= 1) return 'Dificultad Fácil'
-  if (s === 2) return 'Dificultad Moderada'
-  if (s === 3) return 'Dificultad Exigente'
-  if (s === 4) return 'Dificultad Muy Exigente'
-  return 'Dificultad Extrema'
-})
-
-const precalcAdvice = computed(() => {
-  const loadRatio = (profile.load_kg || 0) / (profile.weight_kg || 70)
-  if (loadRatio > 0.2) {
-    return {
-      type: 'warning' as const,
-      icon: 'alert-triangle' as IconName,
-      text: `Atención: La carga de mochila (${profile.load_kg} kg) supera el 20% de tu masa corporal. Esto elevará significativamente la tasa metabólica y la fatiga en pendientes.`,
-    }
-  }
-  if (profile.fitness_level === 'low') {
-    return {
-      type: 'info' as const,
-      icon: 'info' as IconName,
-      text: 'Recomendación: Con nivel de condición física bajo, programa descansos de 10 minutos cada hora de caminata y mantén una ingesta hídrica regular.',
-    }
-  }
-  return {
-    type: 'success' as const,
-    icon: 'shield' as IconName,
-    text: 'Óptimo: La relación de peso y carga se encuentra en rango eficiente para marcha sostenida en montaña.',
-  }
-})
-
-const previewStats = computed(() => {
-  if (analysis.value) {
-    const s = analysis.value.summary
-    return {
-      distance: `${formatNumber(s.total_distance_km, 1)} km`,
-      elevation: `+${formatNumber(s.elevation_gain_m, 0)} m`,
-      maxElevation: `${formatNumber(s.elevation_gain_m + 150, 0)} m`,
-      time: formatDurationHours(s.estimated_time_h),
-    }
-  }
-  if (selectedFile.value) {
-    return {
-      distance: '3.4 km',
-      elevation: '+145 m',
-      maxElevation: '199 m',
-      time: '1h 15m',
-    }
-  }
-  return {
-    distance: '-- km',
-    elevation: '-- m',
-    maxElevation: '-- m',
-    time: '--',
-  }
-})
+// previewStats → moved to UploadFormView
 
 // ── Computed fields for Trail Detail View (100% REAL from backend) ──
 const routeName = computed(() => analysis.value?.route_name ?? 'Ruta Sin Nombre')
@@ -609,10 +505,10 @@ const trailPhotoUrl =
         <button
           class="btn bg-emerald-700 hover:bg-emerald-800 text-white rounded-full px-5 text-xs sm:text-sm font-semibold shadow-xs transition"
           :class="isLoading ? 'btn-disabled opacity-60' : ''"
-          @click="showUploadForm = true"
+          @click="router.push('/mapa/nueva')"
         >
           <span v-if="isLoading" class="loading loading-spinner loading-xs" />
-          <span v-else>{{ analysis ? 'Nueva ruta' : 'Iniciar análisis' }}</span>
+          <span v-else>Nueva ruta</span>
         </button>
 
         <button
@@ -626,842 +522,259 @@ const trailPhotoUrl =
     </header>
 
     <!-- ══════════════════════════════════════════════════════════════ -->
-    <!-- SCREEN 1: FORM PAGE (Cargar Ruta y Configuración de Perfil)    -->
+    <!-- ANALYSIS VIEW                                                 -->
     <!-- ══════════════════════════════════════════════════════════════ -->
     <div
-      v-if="showUploadForm"
       class="flex-1 overflow-y-auto bg-base-100 pb-16"
     >
       <div class="mx-auto max-w-6xl px-4 py-5 sm:px-6">
 
-        <!-- Header Row: Breadcrumbs & Steps -->
-        <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div class="flex items-center gap-2 text-xs font-medium text-base-content/50">
-            <button
-              v-if="analysis"
-              class="hover:text-base-content transition flex items-center gap-1 font-bold text-emerald-700 dark:text-emerald-400"
-              @click="showUploadForm = false"
-            >
-              <AppIcon name="arrow-right" :size="13" class="rotate-180" />
-              Volver a la ruta analizada
+        <!-- Header: Back button + actions -->
+        <div class="av-header">
+          <div class="av-header__top">
+            <button class="av-header__back" @click="router.push('/mapa/nueva')">
+              <AppIcon name="arrow-right" :size="14" class="av-header__back-icon" />
+              Nueva ruta
             </button>
-            <RouterLink
-              v-else
-              to="/"
-              class="hover:text-base-content transition flex items-center gap-1 font-semibold"
-            >
-              <AppIcon name="arrow-right" :size="12" class="rotate-180" />
-              Volver a Explorar
-            </RouterLink>
-            <span>/</span>
-            <span class="text-base-content font-semibold">Cargar nueva ruta</span>
-          </div>
-
-          <!-- Steps indicator -->
-          <div class="flex items-center gap-2 text-xs">
-            <span class="rounded-full bg-emerald-700 px-3 py-1 font-bold text-white shadow-xs">
-              1 Archivo y Mapa
-            </span>
-            <span class="rounded-full bg-base-200 px-3 py-1 font-semibold text-base-content/60">
-              2 Perfil Biomecánico
-            </span>
-            <span class="rounded-full bg-base-200 px-3 py-1 font-semibold text-base-content/60">
-              3 Terreno
-            </span>
-          </div>
-        </div>
-
-        <!-- Title & Subtitle -->
-        <div class="mb-6">
-          <h1 class="text-2xl sm:text-3xl font-black tracking-tight text-base-content">
-            Cargar Ruta y Configuración de Perfil
-          </h1>
-          <p class="mt-1 text-xs sm:text-sm text-base-content/60 max-w-3xl leading-relaxed">
-            Sube tu archivo GPX o GeoJSON y calibra los parámetros biométricos para calcular el índice de riesgo MIDE y la carga metabólica en montaña.
-          </p>
-        </div>
-
-        <!-- Global Error Alert -->
-        <div v-if="error" class="alert alert-error text-xs shadow-xs mb-6">
-          <span>{{ error }}</span>
-        </div>
-
-        <!-- Main 2-Column Grid -->
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-          <!-- LEFT COLUMN: Track uploader + Topo preview (7 cols) -->
-          <div class="lg:col-span-7 space-y-6">
-
-            <!-- Card 1: Importar Track Satelital -->
-            <div class="rounded-2xl border border-base-200 bg-base-100 p-5 sm:p-6 shadow-xs">
-              <div class="flex items-center justify-between mb-4">
-                <div class="flex items-center gap-2.5">
-                  <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400">
-                    <AppIcon name="file-text" :size="18" />
-                  </div>
-                  <div>
-                    <h2 class="text-sm font-bold text-base-content">Importar Track Satelital</h2>
-                    <p class="text-[11px] text-base-content/50">Formatos GPX o GeoJSON con timestamps</p>
-                  </div>
-                </div>
-                <span class="badge badge-success badge-outline text-[10px] font-bold tracking-wider uppercase">
-                  MOTOR V4.2 LISTO
-                </span>
-              </div>
-
-              <!-- Dropzone -->
-              <div
-                class="relative flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-6 sm:p-8 text-center transition-all cursor-pointer"
-                :class="isDragging ? 'border-emerald-600 bg-emerald-500/10' : 'border-base-300 bg-base-200/30 hover:border-emerald-500 hover:bg-base-200/50'"
-                @dragover.prevent="isDragging = true"
-                @dragleave="isDragging = false"
-                @drop="onDropFile"
-                @click="triggerBrowseFile"
-              >
-                <input
-                  ref="formFileInputRef"
-                  type="file"
-                  accept=".gpx,.geojson,.json,application/geo+json,application/json"
-                  class="hidden"
-                  @change="onFormFileChange"
-                />
-
-                <div class="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-400 mb-3 shadow-xs">
-                  <AppIcon name="upload" :size="24" />
-                </div>
-
-                <p class="text-sm font-bold text-base-content">
-                  {{ selectedFile ? selectedFile.name : 'Arrastra tu archivo GPX o GeoJSON aquí' }}
-                </p>
-                <p class="mt-1 max-w-sm text-xs text-base-content/50">
-                  {{ selectedFile ? `${(selectedFile.size / 1024).toFixed(1)} KB preparado para analizar` : 'Compatible con exportaciones de Strava, Garmin Connect, Wikiloc, Suunto y AllTrails (hasta 25 MB).' }}
-                </p>
-
-                <div class="mt-4 flex items-center gap-3">
-                  <button
-                    type="button"
-                    class="btn bg-emerald-700 hover:bg-emerald-800 text-white btn-sm rounded-xl px-4 gap-1.5 font-semibold text-xs shadow-xs"
-                  >
-                    <AppIcon name="folder" :size="14" />
-                    {{ selectedFile ? 'Cambiar archivo' : 'Examinar archivos' }}
-                  </button>
-                  <span v-if="!selectedFile" class="text-[11px] uppercase font-bold tracking-wider text-base-content/40">O SUELTA EL ARCHIVO</span>
-                </div>
-              </div>
-
-              <!-- Sample Route Banner -->
-              <div class="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-800/40 p-3">
-                <div class="flex items-center gap-2.5">
-                  <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-600/10 text-emerald-700 dark:text-emerald-300">
-                    <AppIcon name="mountain" :size="16" />
-                  </div>
-                  <div class="text-xs">
-                    <span class="font-bold text-base-content">¿No tienes un archivo a mano?</span>
-                    <p class="text-[11px] text-base-content/60">Prueba con la ruta de muestra: Cerro Ancón, Panamá (+145m D+)</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-xs text-emerald-800 dark:text-emerald-300 hover:bg-emerald-600/10 font-bold gap-1"
-                  @click="loadDemoRoute"
-                >
-                  Cargar demo
-                  <AppIcon name="arrow-right" :size="12" />
-                </button>
-              </div>
-            </div>
-
-            <!-- Card 2: Previsualización Topográfica -->
-            <div class="rounded-2xl border border-base-200 bg-base-100 p-5 sm:p-6 shadow-xs">
-              <div class="flex items-center justify-between mb-4">
-                <div class="flex items-center gap-2.5">
-                  <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400">
-                    <AppIcon name="map" :size="18" />
-                  </div>
-                  <h2 class="text-sm font-bold text-base-content">Previsualización Topográfica</h2>
-                </div>
-                <div class="flex rounded-lg bg-base-200 p-0.5 text-[11px] font-semibold text-base-content/60">
-                  <span class="rounded-md bg-base-100 px-2 py-1 text-base-content shadow-xs">Topográfica</span>
-                </div>
-              </div>
-
-              <!-- Map container -->
-              <div class="relative h-64 w-full overflow-hidden rounded-xl border border-base-200 bg-base-200/50">
-                <RouteMap
-                  v-if="analysis"
-                  :analysis="analysis"
-                  :selected-seq="null"
-                  :graph="null"
-                  :routing-active="false"
-                  :routing-start="null"
-                  :routing-end="null"
-                  :routing-waypoints="[]"
-                  :optimal-path-features="null"
-                />
-                <div v-else class="h-full w-full flex flex-col items-center justify-center bg-gradient-to-b from-emerald-50/40 via-base-100 to-base-200/40 text-center p-4">
-                  <AppIcon name="compass" :size="36" class="text-emerald-600/40 mb-2" />
-                  <p class="text-xs font-bold text-base-content">
-                    {{ selectedFile ? `Archivo "${selectedFile.name}" listo` : 'Selecciona un archivo GPX para previsualizar' }}
-                  </p>
-                  <p class="text-[11px] text-base-content/50 mt-0.5">
-                    {{ selectedFile ? 'Haz clic en "Analizar ruta y calcular riesgos" para procesar el modelo biomecánico' : 'Se interpolará la elevación y se aplicará corrección Savitzky-Golay' }}
-                  </p>
-                </div>
-
-                <!-- Overlay stats bar -->
-                <div class="absolute inset-x-3 bottom-3 grid grid-cols-4 gap-2 rounded-xl bg-base-100/90 p-2.5 shadow-sm backdrop-blur-md text-center text-xs">
-                  <div>
-                    <span class="block text-[10px] font-bold text-base-content/50 uppercase">Distancia</span>
-                    <strong class="text-xs font-black text-base-content">{{ previewStats.distance }}</strong>
-                  </div>
-                  <div>
-                    <span class="block text-[10px] font-bold text-base-content/50 uppercase">Desnivel +</span>
-                    <strong class="text-xs font-black text-base-content">{{ previewStats.elevation }}</strong>
-                  </div>
-                  <div>
-                    <span class="block text-[10px] font-bold text-base-content/50 uppercase">Cota Máx.</span>
-                    <strong class="text-xs font-black text-base-content">{{ previewStats.maxElevation }}</strong>
-                  </div>
-                  <div>
-                    <span class="block text-[10px] font-bold text-base-content/50 uppercase">Tiempo Est.</span>
-                    <strong class="text-xs font-black text-base-content">{{ previewStats.time }}</strong>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-          </div>
-
-          <!-- RIGHT COLUMN: Hiker Profile + Terrain + Precalculation (5 cols) -->
-          <div class="lg:col-span-5 space-y-6">
-
-            <!-- 1. Perfil del Excursionista -->
-            <div class="rounded-2xl border border-base-200 bg-base-100 p-5 sm:p-6 shadow-xs">
-              <div class="flex items-center gap-2.5 mb-4">
-                <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400">
-                  <AppIcon name="activity" :size="18" />
-                </div>
-                <div>
-                  <h2 class="text-sm font-bold text-base-content">1. Perfil del Excursionista</h2>
-                  <p class="text-[11px] text-base-content/50">Calibración de esfuerzo metabólico y fatiga</p>
-                </div>
-              </div>
-
-              <!-- Name -->
-              <div class="mb-4">
-                <div class="flex items-center justify-between mb-1">
-                  <label class="text-xs font-semibold text-base-content">Nombre o alias del senderista</label>
-                  <span class="text-[10px] text-base-content/40">Opcional</span>
-                </div>
-                <input
-                  v-model="profile.name"
-                  type="text"
-                  placeholder="Ej. Irvin Solo"
-                  class="w-full h-10 rounded-xl border border-base-300 bg-base-200/40 px-3 text-xs font-medium text-base-content focus:border-emerald-600 focus:bg-base-100 focus:outline-hidden"
-                />
-              </div>
-
-              <!-- Weight & Load -->
-              <div class="grid grid-cols-2 gap-3 mb-4">
-                <div>
-                  <label class="block text-xs font-semibold text-base-content mb-1">Peso corporal</label>
-                  <div class="relative">
-                    <input
-                      v-model.number="profile.weight_kg"
-                      type="number"
-                      min="30"
-                      max="200"
-                      class="w-full h-10 rounded-xl border border-base-300 bg-base-200/40 pl-3 pr-8 text-xs font-bold text-base-content focus:border-emerald-600 focus:bg-base-100 focus:outline-hidden"
-                    />
-                    <span class="pointer-events-none absolute right-3 top-2.5 text-xs text-base-content/40">kg</span>
-                  </div>
-                </div>
-
-                <div>
-                  <label class="block text-xs font-semibold text-base-content mb-1">Mochila</label>
-                  <div class="relative">
-                    <input
-                      v-model.number="profile.load_kg"
-                      type="number"
-                      min="0"
-                      max="60"
-                      class="w-full h-10 rounded-xl border border-base-300 bg-base-200/40 pl-3 pr-8 text-xs font-bold text-base-content focus:border-emerald-600 focus:bg-base-100 focus:outline-hidden"
-                    />
-                    <span class="pointer-events-none absolute right-3 top-2.5 text-xs text-base-content/40">kg</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Total mass callout -->
-              <div class="flex items-center justify-between rounded-xl bg-base-200/60 p-3 text-xs mb-4">
-                <span class="font-medium text-base-content/70">Masa total en marcha:</span>
-                <div class="flex items-center gap-2">
-                  <strong class="text-sm font-black text-base-content">{{ totalMass }} kg</strong>
-                  <span class="badge badge-sm font-semibold" :class="loadImpactBadge.class">
-                    {{ loadImpactBadge.label }}
-                  </span>
-                </div>
-              </div>
-
-              <!-- Fitness Level -->
-              <div>
-                <label class="block text-xs font-semibold text-base-content mb-2">Condición física actual</label>
-                <div class="grid grid-cols-4 gap-1.5">
-                  <button
-                    v-for="opt in [
-                      { id: 'low', label: 'Baja' },
-                      { id: 'medium', label: 'Media' },
-                      { id: 'high', label: 'Alta' },
-                      { id: 'athlete', label: 'Atleta' },
-                    ]"
-                    :key="opt.id"
-                    type="button"
-                    class="h-9 rounded-xl text-xs font-bold transition shadow-2xs"
-                    :class="
-                      profile.fitness_level === opt.id
-                        ? 'bg-emerald-700 text-white shadow-xs'
-                        : 'bg-base-200 text-base-content/70 hover:bg-base-300'
-                    "
-                    @click="profile.fitness_level = opt.id as any"
-                  >
-                    {{ opt.label }}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <!-- 2. Terreno (adaptado estrictamente a los tipos soportados por nuestro backend) -->
-            <div class="rounded-2xl border border-base-200 bg-base-100 p-5 sm:p-6 shadow-xs">
-              <div class="flex items-center gap-2.5 mb-4">
-                <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400">
-                  <AppIcon name="mountain" :size="18" />
-                </div>
-                <div>
-                  <h2 class="text-sm font-bold text-base-content">2. Terreno</h2>
-                  <p class="text-[11px] text-base-content/50">Factores de rozamiento e impacto articular</p>
-                </div>
-              </div>
-
-              <div>
-                <label class="block text-xs font-semibold text-base-content mb-1.5">Tipo de superficie predominante</label>
-                <select
-                  v-model="profile.surface_type"
-                  class="w-full h-10 rounded-xl border border-base-300 bg-base-200/40 px-3 text-xs font-medium text-base-content focus:border-emerald-600 focus:bg-base-100 focus:outline-hidden"
-                >
-                  <option value="dirt">Tierra compacta / Sendero regular (fricción 1.0)</option>
-                  <option value="paved">Pavimento / Asfalto (fricción 1.0)</option>
-                  <option value="gravel">Grava / Terreno suelto (fricción 1.2)</option>
-                  <option value="mud">Barro / Terreno húmedo (fricción 1.5)</option>
-                  <option value="sand">Arena blanda (fricción 1.8)</option>
-                  <option value="scrub">Matorral bajo / Sendero rústico (fricción 1.3)</option>
-                  <option value="dense_scrub">Matorral denso / Sin traza definida (fricción 1.6)</option>
-                </select>
-              </div>
-            </div>
-
-            <!-- 3. Precálculo Instantáneo -->
-            <div class="rounded-2xl border border-base-200 bg-base-100 p-5 sm:p-6 shadow-xs">
-              <div class="flex items-center justify-between mb-4">
-                <div class="flex items-center gap-2">
-                  <AppIcon name="zap" :size="16" class="text-amber-500" />
-                  <h3 class="text-xs font-extrabold uppercase tracking-wider text-base-content">
-                    Precálculo Instantáneo
-                  </h3>
-                </div>
-                <span class="badge badge-ghost text-[10px] font-bold text-base-content/50">
-                  MODELO MINETTI
-                </span>
-              </div>
-
-              <div class="grid grid-cols-2 gap-3 rounded-xl bg-base-200/50 p-3 mb-4">
-                <div>
-                  <span class="block text-[10px] font-bold uppercase text-base-content/50">Gasto Energético Est.</span>
-                  <strong class="text-base font-black text-base-content">{{ estimatedKcal }} kcal</strong>
-                  <span class="block text-[10px] text-base-content/50">~450 kcal/hora en ascenso</span>
-                </div>
-                <div>
-                  <span class="block text-[10px] font-bold uppercase text-base-content/50">Índice MIDE Preliminar</span>
-                  <strong class="text-base font-black text-amber-600">Nivel {{ preliminaryMide }} / 5</strong>
-                  <span class="block text-[10px] text-base-content/50">{{ preliminaryMideLabel }}</span>
-                </div>
-              </div>
-
-              <!-- Alert Note -->
-              <div
-                class="rounded-xl border p-3 text-[11px] leading-relaxed mb-5 flex items-start gap-2"
-                :class="precalcAdvice.type === 'warning'
-                  ? 'border-amber-200/60 bg-amber-50/60 dark:border-amber-900/40 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300'
-                  : precalcAdvice.type === 'info'
-                  ? 'border-blue-200/60 bg-blue-50/60 dark:border-blue-900/40 dark:bg-blue-950/20 text-blue-800 dark:text-blue-300'
-                  : 'border-emerald-200/60 bg-emerald-50/60 dark:border-emerald-900/40 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-300'"
-              >
-                <AppIcon :name="precalcAdvice.icon" :size="15" class="shrink-0 mt-0.5" />
-                <span>{{ precalcAdvice.text }}</span>
-              </div>
-
-              <!-- Submit Action Button -->
-              <button
-                type="button"
-                class="btn bg-emerald-700 hover:bg-emerald-800 text-white w-full rounded-xl text-sm font-bold shadow-sm gap-2"
-                :class="isLoading ? 'btn-disabled opacity-70' : ''"
-                :disabled="!selectedFile || !isValid() || isLoading"
-                @click="handleFormSubmit"
-              >
-                <span v-if="isLoading" class="loading loading-spinner loading-xs" />
-                <template v-else>
-                  <AppIcon name="zap" :size="16" />
-                  <span>Analizar ruta y calcular riesgos</span>
-                  <AppIcon name="arrow-right" :size="14" />
-                </template>
-                <span v-if="isLoading">Procesando telemetría en backend...</span>
+            <div class="av-header__actions">
+              <button class="av-action-btn" :disabled="isExportingPdf" @click="downloadPdfReport">
+                <AppIcon :name="isExportingPdf ? 'clock' : 'download'" :size="14" />
+                <span>{{ isExportingPdf ? 'Exportando...' : 'PDF' }}</span>
               </button>
-
-              <p class="flex items-center justify-center gap-1.5 text-center text-[10px] text-base-content/40 mt-2.5">
-                <AppIcon name="shield" :size="12" class="text-emerald-700 dark:text-emerald-400 shrink-0" />
-                <span>Procesamiento local seguro · Compatible con norma oficial MIDE FEDME</span>
-              </p>
+              <button v-if="auth.isAuthenticated && analysis && !savedToHistory" class="av-action-btn" :disabled="isSaving" @click="saveToHistory">
+                <AppIcon name="shield" :size="14" />
+                <span>{{ isSaving ? 'Guardando...' : 'Guardar' }}</span>
+              </button>
+              <span v-else-if="savedToHistory" class="av-saved">✓ Guardado</span>
             </div>
-
           </div>
-
-        </div>
-
-      </div>
-    </div>
-
-    <!-- ══════════════════════════════════════════════════════════════ -->
-    <!-- SCREEN 2: ALLTRAILS TRAIL DETAIL VIEW (Datos 100% Reales)     -->
-    <!-- ══════════════════════════════════════════════════════════════ -->
-    <div
-      v-else
-      class="flex-1 overflow-y-auto bg-base-100 pb-16"
-    >
-      <div class="mx-auto max-w-6xl px-4 py-5 sm:px-6">
-
-        <!-- Breadcrumbs & Quick Actions -->
-        <div class="mb-3 flex flex-wrap items-center justify-between gap-3 text-xs font-medium text-base-content/50">
-          <div class="flex items-center gap-2">
-            <span class="font-bold text-emerald-800 dark:text-emerald-400">RiskTrail Telemetría</span>
-            <span>/</span>
-            <span class="text-base-content/60 font-mono text-[11px]">{{ analysis?.route_id ? analysis.route_id.slice(0, 8) : 'GPX' }}</span>
-            <span>/</span>
-            <span class="text-base-content font-semibold">{{ routeName }}</span>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <!-- Descargar Reporte PDF -->
-            <button
-              class="btn btn-xs sm:btn-sm btn-outline border-base-300 hover:bg-base-200 text-base-content gap-1.5 font-bold rounded-lg shadow-2xs"
-              :disabled="isExportingPdf"
-              title="Descargar informe técnico oficial en formato PDF"
-              @click="downloadPdfReport"
-            >
-              <span v-if="isExportingPdf" class="loading loading-spinner loading-xs" />
-              <AppIcon v-else name="download" :size="14" />
-              <span>{{ isExportingPdf ? 'Exportando...' : 'Descargar Reporte PDF' }}</span>
-            </button>
-
-            <!-- Cambiar parámetros / Cargar otra ruta -->
-            <button
-              class="btn btn-xs sm:btn-sm bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 border-none gap-1 font-bold rounded-lg"
-              @click="showUploadForm = true"
-            >
-              <AppIcon name="upload" :size="13" />
-              <span>Cargar otra ruta</span>
-            </button>
+          <h1 class="av-header__title">{{ routeName }}</h1>
+          <div class="av-header__meta">
+            <span class="av-badge" :class="effortBadgeClass">MIDE {{ analysis?.summary.mide_global ?? 1 }}/5 · {{ effortLabel }}</span>
+            <span class="av-header__dot">·</span>
+            <span>{{ displayDistance }}</span>
+            <span class="av-header__dot">·</span>
+            <span>{{ displayElevation }}</span>
+            <span class="av-header__dot">·</span>
+            <span>{{ displayTime }}</span>
           </div>
         </div>
 
-        <!-- Trail Header -->
-        <div class="mb-4">
-          <div class="flex flex-wrap items-baseline gap-2.5">
-            <h1 class="text-2xl font-black tracking-tight text-base-content sm:text-3xl">
-              {{ routeName }}
-            </h1>
-            <span v-if="analysis?.source_format" class="badge badge-sm font-mono uppercase bg-base-200 text-base-content/60">
-              {{ analysis.source_format }}
-            </span>
-          </div>
-
-          <div class="mt-2.5 flex flex-wrap items-center gap-2.5 text-xs">
-            <!-- MIDE Difficulty Badge -->
-            <span
-              class="rounded-full px-3 py-0.5 text-xs font-bold"
-              :class="effortBadgeClass"
-            >
-              Dificultad {{ effortLabel }} · MIDE {{ analysis?.summary.mide_global ?? 1 }}/5
-            </span>
-
-            <span class="text-base-content/30">•</span>
-
-            <!-- Hiker Summary Chip -->
-            <div class="flex items-center gap-1.5 text-base-content/80 font-medium">
-              <AppIcon name="footprints" :size="14" class="text-emerald-700 dark:text-emerald-400" />
-              <span>Senderista: <strong>{{ profile.name || 'Sin nombre' }}</strong> ({{ profile.weight_kg }} kg + {{ profile.load_kg }} kg carga)</span>
-            </div>
-
-            <span class="text-base-content/30">•</span>
-
-            <!-- Segments count -->
-            <div class="flex items-center gap-1.5 text-base-content/60">
-              <AppIcon name="route" :size="14" class="text-base-content/40" />
-              <span>{{ analysis?.segments.length ?? 0 }} tramos calculados</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Underline Tabs Bar -->
-        <div class="flex border-b border-base-200">
+        <!-- Tabs -->
+        <nav class="av-tabs">
           <button
             v-for="tab in [
               { id: 'resumen', label: 'Resumen' },
-              { id: 'condiciones', label: 'Condiciones' },
-              { id: 'mide', label: 'MIDE' },
-              { id: 'analysis', label: 'Análisis' },
+              { id: 'detalles', label: 'Detalles' },
+              { id: 'ruta', label: 'Ruta' },
             ]"
             :key="tab.id"
-            class="-mb-px border-b-2 px-4 py-3 text-sm font-bold transition"
-            :class="
-              activeTab === tab.id
-                ? 'border-emerald-700 text-emerald-800 dark:border-emerald-400 dark:text-emerald-400'
-                : 'border-transparent text-base-content/60 hover:text-base-content'
-            "
+            class="av-tabs__item"
+            :class="{ 'av-tabs__item--active': activeTab === tab.id }"
             @click="activeTab = tab.id as PageTab"
           >
             {{ tab.label }}
           </button>
-        </div>
+        </nav>
 
-        <!-- ── TAB: RESUMEN (Mockup Main View con Datos Reales) ── -->
-        <div v-if="activeTab === 'resumen'" class="mt-6 space-y-6">
-          <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <!-- ── TAB: RESUMEN (Hero) ── -->
+        <div v-if="activeTab === 'resumen'" class="av-resumen">
 
-            <!-- Left 2 Cols: Media Grid + Metric Cards + Description -->
-            <div class="space-y-6 lg:col-span-2">
+          <!-- Full-width hero map -->
+          <div class="av-map">
+            <RouteMap
+              ref="routeMapRef"
+              :analysis="analysis"
+              :selected-seq="selectedSegment?.seq ?? null"
+              :graph="routeGraph"
+              :routing-active="false"
+              :routing-start="null"
+              :routing-end="null"
+              :routing-waypoints="[]"
+              :optimal-path-features="optimalPathFeatures"
+              :hide-segments="true"
+              @select-segment="routeStore.selectSegment"
+            />
+            <button
+              class="av-map__expand"
+              title="Expandir a modo análisis completo"
+              @click="activeTab = 'ruta'"
+            >
+              <AppIcon name="maximize-2" :size="18" />
+            </button>
+          </div>
 
-              <!-- Hero Map: ocupa todo el ancho con hide-segments para vista limpia y espaciosa -->
-              <div class="relative h-[440px] sm:h-[500px] lg:h-[560px] w-full overflow-hidden rounded-2xl border border-base-200 bg-base-200 shadow-xs">
-                <RouteMap
-                  ref="routeMapRef"
-                  :analysis="analysis"
-                  :selected-seq="selectedSegment?.seq ?? null"
-                  :graph="routeGraph"
-                  :routing-active="false"
-                  :routing-start="null"
-                  :routing-end="null"
-                  :routing-waypoints="[]"
-                  :optimal-path-features="optimalPathFeatures"
-                  :hide-segments="true"
-                  @select-segment="routeStore.selectSegment"
-                />
-
-                <!-- Expand button to full GIS view -->
-                <button
-                  class="absolute right-3 top-3 z-20 flex h-9 w-9 items-center justify-center rounded-xl bg-base-100/90 text-base-content shadow-md backdrop-blur transition hover:bg-base-100 hover:scale-105"
-                  title="Expandir a modo análisis completo"
-                  @click="activeTab = 'analysis'"
-                >
-                  <AppIcon name="maximize-2" :size="18" />
-                </button>
-              </div>
-
-              <!-- Elevation Profile -->
-              <div v-if="analysis" class="relative rounded-2xl border border-base-200 bg-base-100 p-4 shadow-xs">
-                <div class="mb-2 flex items-center justify-between">
-                  <h3 class="text-xs font-bold text-base-content/60">Perfil altimétrico</h3>
-                  <span class="text-[10px] text-base-content/40">Tocá un tramo para ver detalles</span>
-                </div>
-                <ElevationProfile
-                  :analysis="analysis"
-                  :selected-seq="selectedSegment?.seq ?? null"
-                  @select-segment="routeStore.selectSegment"
-                />
-              </div>
-
-              <!-- 4 Metric Cards (100% REALES del backend) -->
-              <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div class="flex flex-col items-center justify-center rounded-2xl border border-base-200 bg-base-100 p-4 text-center shadow-xs">
-                  <AppIcon name="route" :size="20" class="mb-1 text-base-content/40" />
-                  <span class="text-xs font-medium text-base-content/60">Distancia</span>
-                  <span class="mt-0.5 text-xl font-black text-base-content sm:text-2xl">{{ displayDistance }}</span>
-                </div>
-
-                <div class="flex flex-col items-center justify-center rounded-2xl border border-base-200 bg-base-100 p-4 text-center shadow-xs">
-                  <AppIcon name="mountain" :size="20" class="mb-1 text-base-content/40" />
-                  <span class="text-xs font-medium text-base-content/60">Desnivel</span>
-                  <span class="mt-0.5 text-xl font-black text-base-content sm:text-2xl">{{ displayElevation }}</span>
-                </div>
-
-                <div class="flex flex-col items-center justify-center rounded-2xl border border-base-200 bg-base-100 p-4 text-center shadow-xs">
-                  <AppIcon name="clock" :size="20" class="mb-1 text-base-content/40" />
-                  <span class="text-xs font-medium text-base-content/60">Tiempo est.</span>
-                  <span class="mt-0.5 text-xl font-black text-base-content sm:text-2xl">{{ displayTime }}</span>
-                </div>
-
-                <div class="flex flex-col items-center justify-center rounded-2xl border border-base-200 bg-base-100 p-4 text-center shadow-xs">
-                  <AppIcon name="zap" :size="20" class="mb-1 text-base-content/40" />
-                  <span class="text-xs font-medium text-base-content/60">Calorías</span>
-                  <span class="mt-0.5 text-xl font-black text-base-content sm:text-2xl">{{ displayCalories }}</span>
-                </div>
-              </div>
-
-              <!-- Hiker Profile Strip (Datos reales calibrados) -->
-              <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200/60 bg-emerald-50/50 p-4 dark:border-emerald-900/40 dark:bg-emerald-950/20 text-xs">
-                <div class="flex items-center gap-3">
-                  <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-700 text-white font-bold shrink-0 shadow-xs">
-                    <AppIcon name="footprints" :size="20" />
-                  </div>
-                  <div>
-                    <div class="flex items-center gap-2">
-                      <strong class="text-sm font-bold text-base-content">{{ profile.name || 'Senderista' }}</strong>
-                      <span class="badge badge-sm badge-outline font-semibold">{{ fitnessLevelLabel }}</span>
-                      <span class="badge badge-sm font-bold" :class="loadImpactBadge.class">
-                        {{ loadImpactBadge.label }}
-                      </span>
-                    </div>
-                    <div class="mt-0.5 text-[11px] text-base-content/60">
-                      Peso: <strong>{{ profile.weight_kg }} kg</strong> · Mochila: <strong>{{ profile.load_kg }} kg</strong> · Masa total: <strong class="text-emerald-700 dark:text-emerald-400">{{ totalMass }} kg</strong> ({{ ((profile.load_kg / (profile.weight_kg || 70)) * 100).toFixed(0) }}% ratio) · Superficie: <strong>{{ surfaceTypeLabel }}</strong>
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  class="btn btn-xs sm:btn-sm bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg gap-1 shadow-2xs shrink-0"
-                  @click="showUploadForm = true"
-                >
-                  <AppIcon name="upload" :size="13" />
-                  Recalibrar
-                </button>
-              </div>
-
-              <!-- Route Description -->
-              <p class="text-sm leading-relaxed text-base-content/80 sm:text-base">
-                {{ displayDescription }}
-              </p>
+          <!-- Compact metric row -->
+          <div class="av-metrics">
+            <div class="av-metric">
+              <AppIcon name="route" :size="16" />
+              <span class="av-metric__value">{{ displayDistance }}</span>
             </div>
+            <div class="av-metric">
+              <AppIcon name="mountain" :size="16" />
+              <span class="av-metric__value">{{ displayElevation }}</span>
+            </div>
+            <div class="av-metric">
+              <AppIcon name="clock" :size="16" />
+              <span class="av-metric__value">{{ displayTime }}</span>
+            </div>
+            <div class="av-metric">
+              <AppIcon name="zap" :size="16" />
+              <span class="av-metric__value">{{ displayCalories }}</span>
+            </div>
+          </div>
 
-            <!-- Right 1 Col: Perfil del Senderista + PUNTUACIÓN MIDE + Carga Fisiológica -->
-            <div class="space-y-5 lg:col-span-1">
-              <!-- Card: Perfil Biomecánico del Senderista -->
-              <div class="rounded-2xl border border-base-200 bg-base-100 p-5 shadow-xs">
-                <div class="flex items-center justify-between mb-3.5">
-                  <div class="flex items-center gap-2">
-                    <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400">
-                      <AppIcon name="footprints" :size="15" />
-                    </div>
-                    <h3 class="text-xs font-extrabold uppercase tracking-wider text-base-content">
-                      DATOS DEL SENDERISTA
-                    </h3>
-                  </div>
-                  <button
-                    class="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 hover:underline flex items-center gap-1"
-                    title="Editar parámetros y recalcular"
-                    @click="showUploadForm = true"
-                  >
-                    <AppIcon name="upload" :size="12" />
-                    Editar
-                  </button>
-                </div>
+          <!-- Compact hiker profile strip -->
+          <div class="av-profile-strip">
+            <div class="av-profile-strip__icon">
+              <AppIcon name="footprints" :size="14" />
+            </div>
+            <span class="av-profile-strip__name">{{ profile.name || 'Senderista' }}</span>
+            <span class="av-profile-strip__sep">·</span>
+            <span>{{ profile.weight_kg }} kg + {{ profile.load_kg }} kg</span>
+            <span class="av-profile-strip__sep">·</span>
+            <span>{{ fitnessLevelLabel }}</span>
+            <span class="av-profile-strip__sep">·</span>
+            <span>{{ surfaceTypeLabel }}</span>
+            <span class="av-profile-strip__sep">·</span>
+            <span class="av-profile-strip__mass">{{ totalMass }} kg total</span>
+            <button class="av-profile-strip__edit" @click="router.push('/mapa/nueva')">
+              <AppIcon name="upload" :size="12" />
+              Recalibrar
+            </button>
+          </div>
 
-                <div class="space-y-2 text-xs">
-                  <div class="flex justify-between items-center py-1 border-b border-base-200/60">
-                    <span class="text-base-content/60">Senderista</span>
-                    <span class="font-bold text-base-content">{{ profile.name || 'Sin especificar' }}</span>
-                  </div>
-                  <div class="flex justify-between items-center py-1 border-b border-base-200/60">
-                    <span class="text-base-content/60">Masa corporal</span>
-                    <span class="font-bold text-base-content">{{ profile.weight_kg }} kg</span>
-                  </div>
-                  <div class="flex justify-between items-center py-1 border-b border-base-200/60">
-                    <span class="text-base-content/60">Carga mochila</span>
-                    <span class="font-bold text-base-content">{{ profile.load_kg }} kg</span>
-                  </div>
-                  <div class="flex justify-between items-center py-1 border-b border-base-200/60">
-                    <span class="text-base-content/60">Masa total en marcha</span>
-                    <strong class="font-black text-emerald-700 dark:text-emerald-400">{{ totalMass }} kg</strong>
-                  </div>
-                  <div class="flex justify-between items-center py-1 border-b border-base-200/60">
-                    <span class="text-base-content/60">Ratio de carga</span>
-                    <span class="badge badge-sm font-bold" :class="loadImpactBadge.class">
-                      {{ ((profile.load_kg / (profile.weight_kg || 70)) * 100).toFixed(0) }}% · {{ loadImpactBadge.label }}
-                    </span>
-                  </div>
-                  <div class="flex justify-between items-center py-1 border-b border-base-200/60">
-                    <span class="text-base-content/60">Nivel de condición</span>
-                    <span class="font-semibold text-base-content">{{ fitnessLevelLabel }}</span>
-                  </div>
-                  <div class="flex justify-between items-center py-1">
-                    <span class="text-base-content/60">Superficie base</span>
-                    <span class="font-semibold text-base-content">{{ surfaceTypeLabel }}</span>
-                  </div>
-                </div>
+          <!-- Elevation profile -->
+          <div v-if="analysis" class="av-elevation">
+            <h3 class="av-section-title">Perfil altimétrico</h3>
+            <ElevationProfile
+              :analysis="analysis"
+              :selected-seq="selectedSegment?.seq ?? null"
+              @select-segment="routeStore.selectSegment"
+            />
+          </div>
 
-                <div class="mt-3.5 rounded-xl bg-base-200/60 p-2.5 text-[11px] leading-tight text-base-content/70 flex items-start gap-1.5">
-                  <AppIcon name="info" :size="13" class="shrink-0 mt-0.5 text-base-content/50" />
-                  <span>Calibración aplicada al coste metabólico Minetti ({{ displayCalories }} kcal calculadas para esta ruta).</span>
+          <!-- Collapsible details: Profile + MIDE + Load -->
+          <details class="av-details">
+            <summary class="av-details__summary">
+              <AppIcon name="footprints" :size="16" />
+              <span>Perfil biomecánico y MIDE</span>
+              <AppIcon name="chevron-down" :size="14" class="av-details__chevron" />
+            </summary>
+            <div class="av-details__body">
+              <!-- Hiker profile (compact) -->
+              <div class="av-profile-row">
+                <div class="av-profile-row__info">
+                  <span class="av-profile-row__name">{{ profile.name || 'Senderista' }}</span>
+                  <span class="av-profile-row__detail">{{ profile.weight_kg }} kg · {{ profile.load_kg }} kg carga · {{ totalMass }} kg total</span>
                 </div>
+                <span class="av-badge" :class="loadImpactBadge.class">{{ loadImpactBadge.label }}</span>
               </div>
 
-              <!-- Card: PUNTUACIÓN MIDE -->
-              <div class="rounded-2xl border border-base-200 bg-base-100 p-5 shadow-xs">
-                <div class="flex items-center justify-between mb-4">
-                  <h3 class="text-xs font-extrabold uppercase tracking-wider text-base-content">
-                    PUNTUACIÓN MIDE
-                  </h3>
-                  <span class="badge badge-sm font-bold" :class="effortBadgeClass">
-                    Global {{ analysis?.summary.mide_global ?? 3 }}/5
-                  </span>
-                </div>
-
-                <div class="space-y-4">
-                  <div v-for="item in mideMetrics" :key="item.key" class="space-y-1.5">
-                    <div class="flex items-center justify-between text-xs">
-                      <span class="font-medium text-base-content/80">{{ item.label }}</span>
-                      <span class="font-bold text-base-content">{{ item.value }}/5</span>
-                    </div>
-                    <!-- Gradient indicator bar -->
-                    <div class="relative h-2 w-full overflow-hidden rounded-full bg-base-200">
-                      <div
-                        class="h-full rounded-full bg-gradient-to-r from-emerald-500 via-amber-400 to-rose-500 transition-all duration-500"
-                        :style="{ width: `${(item.value / 5) * 100}%` }"
-                      />
-                    </div>
+              <!-- MIDE score with bars -->
+              <div class="av-mide-bars">
+                <div v-for="item in mideMetrics" :key="item.key" class="av-mide-bar">
+                  <div class="av-mide-bar__header">
+                    <span class="av-mide-bar__label">{{ item.label }}</span>
+                    <span class="av-mide-bar__value">{{ item.value }}/5</span>
+                  </div>
+                  <div class="av-mide-bar__track">
+                    <div
+                      class="av-mide-bar__fill"
+                      :style="{ width: `${(item.value / 5) * 100}%` }"
+                    />
                   </div>
                 </div>
               </div>
 
-              <!-- Card: Carga fisiológica (Calculada de los tramos reales) -->
-              <div class="rounded-2xl border border-base-200 bg-base-100 p-5 shadow-xs">
-                <h3 class="text-sm font-bold text-base-content">
-                  Carga fisiológica
-                </h3>
-                <p class="mt-0.5 text-xs text-base-content/60">
-                  Zona cardíac distribución
-                </p>
-
-                <!-- Real cardiac segments bar -->
-                <div class="mt-4 flex h-6 w-full overflow-hidden rounded-lg font-bold text-[11px] text-white shadow-xs">
+              <!-- Cardiac distribution bar -->
+              <div class="av-cardiac">
+                <h4 class="av-section-title">Zona cardíaca</h4>
+                <div class="av-cardiac__bar">
                   <div
-                    class="flex items-center justify-center bg-emerald-600 transition-all duration-500"
+                    class="av-cardiac__segment av-cardiac__segment--z1"
                     :style="{ width: `${cardiacDistribution.pct1}%` }"
                   >
                     {{ cardiacDistribution.pct1 }}%
                   </div>
                   <div
-                    class="flex items-center justify-center bg-amber-500 transition-all duration-500"
+                    class="av-cardiac__segment av-cardiac__segment--z2"
                     :style="{ width: `${cardiacDistribution.pct2}%` }"
                   >
                     {{ cardiacDistribution.pct2 }}%
                   </div>
                   <div
-                    class="flex items-center justify-center bg-rose-600 transition-all duration-500"
+                    class="av-cardiac__segment av-cardiac__segment--z3"
                     :style="{ width: `${cardiacDistribution.pct3}%` }"
                   >
                     {{ cardiacDistribution.pct3 }}%
                   </div>
                 </div>
-
-                <div class="mt-2 flex justify-between px-1 text-[11px] text-base-content/60 font-medium">
-                  <span class="text-left">Z1-Z2 Cómodo</span>
-                  <span class="text-center">Z3 Umbral</span>
-                  <span class="text-right">Z5 Máximo</span>
+                <div class="av-cardiac__legend">
+                  <span>Z1-Z2 Cómodo</span>
+                  <span>Z3 Umbral</span>
+                  <span>Z5 Máximo</span>
                 </div>
               </div>
             </div>
+          </details>
 
-          </div>
+          <!-- Route description -->
+          <p class="av-description">{{ displayDescription }}</p>
 
-          <!-- Bottom Action Buttons -->
-          <div class="flex flex-wrap items-center justify-center gap-3 pt-4">
-            <button
-              class="btn bg-emerald-700 hover:bg-emerald-800 text-white rounded-full px-8 text-sm font-semibold shadow-xs"
-              @click="activeTab = 'analysis'"
-            >
-              Analizar ruta en modo GIS
+          <!-- Action row -->
+          <div class="av-actions">
+            <button class="av-btn-primary" @click="activeTab = 'ruta'">
+              <AppIcon name="map" :size="16" />
+              Análisis GIS
             </button>
-
-            <button
-              class="btn btn-outline border-emerald-700 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-500 dark:text-emerald-400 dark:hover:bg-emerald-950/30 rounded-full px-6 text-sm font-bold gap-2"
-              :disabled="isExportingPdf"
-              @click="downloadPdfReport"
-            >
-              <span v-if="isExportingPdf" class="loading loading-spinner loading-xs" />
-              <AppIcon v-else name="download" :size="16" />
-              <span>{{ isExportingPdf ? 'Generando PDF...' : 'Descargar Reporte PDF' }}</span>
-            </button>
-
-            <button
-              class="btn btn-outline rounded-full px-6 text-sm font-semibold border-base-300 hover:bg-base-200 gap-1.5"
-              title="Cambiar parámetros del senderista o subir otra ruta"
-              @click="showUploadForm = true"
-            >
-              <AppIcon name="upload" :size="16" class="text-base-content/70" />
-              Recalibrar o subir otra ruta
+            <button class="av-btn-outline" @click="router.push('/mapa/nueva')">
+              <AppIcon name="upload" :size="14" />
+              Recalibrar
             </button>
           </div>
         </div>
 
-        <!-- ── TAB: CONDICIONES ── -->
-        <div v-else-if="activeTab === 'condiciones'" class="mt-6 space-y-6">
-          <div class="rounded-2xl border border-base-200 bg-base-100 p-6 shadow-xs">
-            <h2 class="text-lg font-bold text-base-content">Condiciones Meteorológicas y Ambientales</h2>
-            <p class="mt-1 text-xs text-base-content/60">
-              Datos climáticos del recorrido calculados en tiempo real.
-            </p>
+        <!-- ── TAB: DETALLES (Condiciones + MIDE) ── -->
+        <div v-else-if="activeTab === 'detalles'" class="av-detalles">
 
-            <div class="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div class="rounded-xl bg-base-200/60 p-4">
-                <span class="block text-xs text-base-content/60">Temperatura</span>
-                <strong class="text-lg">{{ simulation.climate.temperature_c ?? 22 }} °C</strong>
+          <!-- Climate data -->
+          <div class="av-detalles__section">
+            <h2 class="av-section-title">Condiciones Meteorológicas</h2>
+            <p class="av-detalles__subtitle">Datos climáticos del recorrido calculados en tiempo real.</p>
+            <div class="av-climate-grid">
+              <div class="av-climate-card">
+                <span class="av-climate-card__label">Temperatura</span>
+                <span class="av-climate-card__value">{{ simulation.climate.temperature_c ?? 22 }} °C</span>
               </div>
-              <div class="rounded-xl bg-base-200/60 p-4">
-                <span class="block text-xs text-base-content/60">Humedad</span>
-                <strong class="text-lg">{{ simulation.climate.humidity_pct ?? 65 }} %</strong>
+              <div class="av-climate-card">
+                <span class="av-climate-card__label">Humedad</span>
+                <span class="av-climate-card__value">{{ simulation.climate.humidity_pct ?? 65 }} %</span>
               </div>
-              <div class="rounded-xl bg-base-200/60 p-4">
-                <span class="block text-xs text-base-content/60">Índice WBGT</span>
-                <strong class="text-lg">{{ formatNumber(analysis?.summary.wbgt ?? 20.4, 1) }} °C</strong>
+              <div class="av-climate-card">
+                <span class="av-climate-card__label">Índice WBGT</span>
+                <span class="av-climate-card__value">{{ formatNumber(analysis?.summary.wbgt ?? 20.4, 1) }} °C</span>
               </div>
-              <div class="rounded-xl bg-base-200/60 p-4">
-                <span class="block text-xs text-base-content/60">Índice UV</span>
-                <strong class="text-lg">{{ simulation.climate.uv_index ?? 7 }} / 11</strong>
+              <div class="av-climate-card">
+                <span class="av-climate-card__label">Índice UV</span>
+                <span class="av-climate-card__value">{{ simulation.climate.uv_index ?? 7 }} / 11</span>
               </div>
-            </div>
-
-            <div class="mt-6">
-              <button
-                class="btn btn-sm bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl"
-                @click="activeTab = 'analysis'"
-              >
-                Abrir Simulador de Clima en Análisis
-              </button>
             </div>
           </div>
-        </div>
 
-        <!-- ── TAB: MIDE ── -->
-        <div v-else-if="activeTab === 'mide'" class="mt-6 space-y-6">
-          <div class="rounded-2xl border border-base-200 bg-base-100 p-6 shadow-xs">
-            <h2 class="text-lg font-bold text-base-content">Desglose Detallado MIDE (FEDA)</h2>
-            <p class="mt-1 text-xs text-base-content/60">
-              Método de Información de Excursiones estandarizado para evaluar la dificultad técnica y física.
-            </p>
-
-            <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div
-                v-for="item in mideMetrics"
-                :key="item.key"
-                class="rounded-xl border border-base-200 p-4 bg-base-100"
-              >
-                <div class="flex items-center justify-between">
-                  <span class="font-bold text-sm">{{ item.label }}</span>
-                  <span class="badge badge-sm" :class="item.value >= 4 ? 'badge-error' : item.value === 3 ? 'badge-warning' : 'badge-success'">
-                    Nivel {{ item.value }} / 5
-                  </span>
+          <!-- MIDE breakdown -->
+          <div class="av-detalles__section">
+            <h2 class="av-section-title">Desglose MIDE (FEDA)</h2>
+            <p class="av-detalles__subtitle">Método de Información de Excursiones — dificultad técnica y física.</p>
+            <div class="av-mide-bars">
+              <div v-for="item in mideMetrics" :key="item.key" class="av-mide-bar">
+                <div class="av-mide-bar__header">
+                  <span class="av-mide-bar__label">{{ item.label }}</span>
+                  <span class="av-mide-bar__value">{{ item.value }}/5</span>
                 </div>
-                <div class="relative mt-3 h-2 w-full overflow-hidden rounded-full bg-base-200">
+                <div class="av-mide-bar__track">
                   <div
-                    class="h-full rounded-full bg-gradient-to-r from-emerald-500 via-amber-400 to-rose-500"
+                    class="av-mide-bar__fill"
                     :style="{ width: `${(item.value / 5) * 100}%` }"
                   />
                 </div>
@@ -1470,133 +783,109 @@ const trailPhotoUrl =
           </div>
         </div>
 
+        <!-- ── TAB: RUTA (GIS Map + Segment Detail + Route Planner) ── -->
+        <div v-else-if="activeTab === 'ruta'" class="av-ruta">
+          <div class="av-ruta__header">
+            <div>
+              <h2 class="av-section-title">Auditoría Técnica de Tramos</h2>
+              <p class="av-detalles__subtitle">Selecciona cualquier tramo en el mapa para inspeccionar sus métricas biomecánicas.</p>
+            </div>
+            <div class="av-ruta__header-actions">
+              <button class="av-action-btn" :disabled="isExportingPdf" @click="downloadPdfReport">
+                <AppIcon :name="isExportingPdf ? 'clock' : 'download'" :size="14" />
+                <span>{{ isExportingPdf ? 'Exportando...' : 'PDF' }}</span>
+              </button>
+              <span class="av-ruta__count">{{ analysis?.segments.length ?? 0 }} tramos</span>
+            </div>
+          </div>
 
-        <!-- ── TAB: ANÁLISIS (Auditoría Técnica de Tramos y Ruteo Óptimo) ── -->
-        <div v-else-if="activeTab === 'analysis'" class="mt-6 space-y-6">
-          <div class="rounded-2xl border border-base-200 bg-base-100 p-5 sm:p-6 shadow-xs">
-            <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-              <div>
-                <h2 class="text-lg font-bold text-base-content">Auditoría Técnica de Tramos</h2>
-                <p class="text-xs text-base-content/60">
-                  Selecciona cualquier tramo en el mapa para inspeccionar velocidad, pendiente, coste metabólico y nivel de riesgo.
-                </p>
+          <!-- Full-width interactive analysis map -->
+          <div class="av-map av-map--analysis">
+            <RouteMap
+              ref="routeMapRef"
+              :analysis="analysis"
+              :selected-seq="selectedSegment?.seq ?? null"
+              :graph="routeGraph"
+              :routing-active="routingActive"
+              :routing-start="routingStart"
+              :routing-end="routingEnd"
+              :routing-waypoints="routingWaypoints"
+              :optimal-path-features="optimalPathFeatures"
+              :hide-segments="false"
+              @select-segment="routeStore.selectSegment"
+              @toggle-routing-node="toggleRoutingNode"
+            />
+          </div>
+
+          <!-- Grid: Segment Detail + Route Planner -->
+          <div class="av-ruta__grid">
+
+            <!-- Selected Segment Detail -->
+            <div class="av-segment-card">
+              <div v-if="selectedSegment">
+                <div class="av-segment-card__header">
+                  <div>
+                    <h3 class="av-segment-card__title">Tramo #{{ selectedSegment.seq }}</h3>
+                    <p class="av-segment-card__direction">{{ directionLabel(selectedSegment.direction) }}</p>
+                  </div>
+                  <span class="av-badge" :class="selectedRiskClass">{{ selectedRiskLabel }} · {{ selectedSegment.risk_score }}</span>
+                </div>
+
+                <div class="av-segment-card__meaning">{{ selectedSegmentMeaning }}</div>
+
+                <div class="av-segment-card__metrics">
+                  <div class="av-segment-metric">
+                    <span class="av-segment-metric__label">Velocidad</span>
+                    <strong class="av-segment-metric__value">{{ selectedSegment.velocity_kmh }} km/h</strong>
+                  </div>
+                  <div class="av-segment-metric">
+                    <span class="av-segment-metric__label">Pendiente</span>
+                    <strong class="av-segment-metric__value">{{ selectedSegment.slope_pct }}</strong>
+                  </div>
+                  <div class="av-segment-metric">
+                    <span class="av-segment-metric__label">Coste Transporte</span>
+                    <strong class="av-segment-metric__value">{{ selectedSegment.cot_j_per_kg_m }} J/kg·m</strong>
+                  </div>
+                  <div class="av-segment-metric">
+                    <span class="av-segment-metric__label">Tasa Metabólica</span>
+                    <strong class="av-segment-metric__value">{{ selectedSegment.metabolic_rate_w }} W</strong>
+                  </div>
+                </div>
+
+                <div class="av-segment-card__tags">
+                  <span class="av-tag">{{ selectedSegment.surface_type }}</span>
+                  <span class="av-tag" :class="selectedSegment.is_on_path ? 'av-tag--success' : 'av-tag--warning'">
+                    {{ selectedSegment.is_on_path ? 'sendero consolidado' : 'off-path' }}
+                  </span>
+                  <span v-if="selectedSegment.is_eccentric_fatigue" class="av-tag av-tag--error">bajada fatigante</span>
+                </div>
               </div>
-              <div class="flex items-center gap-2">
-                <button
-                  class="btn btn-xs sm:btn-sm btn-outline border-base-300 gap-1.5 font-bold"
-                  :disabled="isExportingPdf"
-                  @click="downloadPdfReport"
-                >
-                  <span v-if="isExportingPdf" class="loading loading-spinner loading-xs" />
-                  <AppIcon v-else name="download" :size="14" />
-                  <span>{{ isExportingPdf ? 'Exportando...' : 'Descargar Reporte PDF' }}</span>
-                </button>
-                <span class="badge badge-ghost text-xs font-semibold">{{ analysis?.segments.length ?? 0 }} tramos calculados</span>
+
+              <div v-else class="av-segment-card__empty">
+                <AppIcon name="map" :size="32" />
+                <p>Toca un tramo en el mapa para ver sus métricas</p>
               </div>
             </div>
 
-            <!-- Full-width Interactive Analysis Map -->
-            <div class="relative h-[440px] sm:h-[500px] w-full overflow-hidden rounded-xl border border-base-200 bg-base-200 shadow-xs mb-6">
-              <RouteMap
-                ref="routeMapRef"
-                :analysis="analysis"
-                :selected-seq="selectedSegment?.seq ?? null"
-                :graph="routeGraph"
-                :routing-active="routingActive"
-                :routing-start="routingStart"
-                :routing-end="routingEnd"
-                :routing-waypoints="routingWaypoints"
-                :optimal-path-features="optimalPathFeatures"
-                :hide-segments="false"
-                @select-segment="routeStore.selectSegment"
-                @toggle-routing-node="toggleRoutingNode"
+            <!-- Route Planner -->
+            <div class="av-planner-card">
+              <h3 class="av-section-title">Planificador de Ruta Óptima</h3>
+              <RoutePlanner
+                v-if="analysis"
+                :is-active="routingActive"
+                :algorithm="routingAlgorithm"
+                :start="routingStart"
+                :end="routingEnd"
+                :waypoints="routingWaypoints"
+                :can-compute="canComputeRoute"
+                :optimal-path="optimalPath"
+                :disabled="isLoading"
+                @toggle-active="toggleRouting"
+                @update:algorithm="routingAlgorithm = $event"
+                @remove-node="toggleRoutingNode"
+                @compute="computeOptimalRoute"
+                @clear="clearRouting"
               />
-            </div>
-
-            <!-- Grid: Selected Segment Detail + Route Planner -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-              <!-- Selected Segment Detail Card -->
-              <div class="rounded-xl border border-base-200 bg-base-200/40 p-4">
-                <div v-if="selectedSegment">
-                  <div class="flex items-start justify-between gap-2">
-                    <div>
-                      <h3 class="text-sm font-bold">Tramo #{{ selectedSegment.seq }}</h3>
-                      <p class="text-xs text-base-content/60">
-                        Dirección: {{ directionLabel(selectedSegment.direction) }}
-                      </p>
-                    </div>
-                    <span class="badge badge-sm" :class="selectedRiskClass">
-                      {{ selectedRiskLabel }} · Riesgo {{ selectedSegment.risk_score }}
-                    </span>
-                  </div>
-
-                  <div class="mt-2.5 rounded-xl bg-base-100 p-3 text-xs leading-relaxed text-base-content/80 shadow-2xs">
-                    {{ selectedSegmentMeaning }}
-                  </div>
-
-                  <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
-                    <div class="rounded-xl bg-base-100 p-2.5 shadow-2xs">
-                      <span class="block text-[10px] font-bold text-base-content/50 uppercase">Velocidad</span>
-                      <strong class="text-xs font-black">{{ selectedSegment.velocity_kmh }} km/h</strong>
-                    </div>
-                    <div class="rounded-xl bg-base-100 p-2.5 shadow-2xs">
-                      <span class="block text-[10px] font-bold text-base-content/50 uppercase">Pendiente</span>
-                      <strong class="text-xs font-black">{{ selectedSegment.slope_pct }}</strong>
-                    </div>
-                    <div class="rounded-xl bg-base-100 p-2.5 shadow-2xs">
-                      <span class="block text-[10px] font-bold text-base-content/50 uppercase">Coste de Transporte</span>
-                      <strong class="text-xs font-black">{{ selectedSegment.cot_j_per_kg_m }} J/kg·m</strong>
-                    </div>
-                    <div class="rounded-xl bg-base-100 p-2.5 shadow-2xs">
-                      <span class="block text-[10px] font-bold text-base-content/50 uppercase">Tasa Metabólica</span>
-                      <strong class="text-xs font-black">{{ selectedSegment.metabolic_rate_w }} W</strong>
-                    </div>
-                  </div>
-
-                  <div class="mt-3 flex flex-wrap gap-1.5">
-                    <span class="badge badge-ghost badge-sm">{{ selectedSegment.surface_type }}</span>
-                    <span
-                      class="badge badge-sm"
-                      :class="selectedSegment.is_on_path ? 'badge-success' : 'badge-warning'"
-                    >
-                      {{ selectedSegment.is_on_path ? 'sendero consolidado' : 'campo a través (off-path)' }}
-                    </span>
-                    <span v-if="selectedSegment.is_eccentric_fatigue" class="badge badge-error badge-sm">
-                      bajada fatigante
-                    </span>
-                  </div>
-                </div>
-
-                <div v-else class="flex flex-col items-center justify-center py-10 text-center">
-                  <AppIcon name="map" :size="32" class="text-base-content/30 mb-2" />
-                  <p class="text-xs font-semibold text-base-content/60">
-                    Toca un tramo en el mapa superior para ver sus métricas biomecánicas en detalle
-                  </p>
-                </div>
-              </div>
-
-              <!-- Route Planner Card (Ruta óptima) -->
-              <div class="rounded-xl border border-base-200 bg-base-200/40 p-4">
-                <h3 class="text-sm font-bold text-base-content mb-2">Planificador de Ruta Óptima</h3>
-                <RoutePlanner
-                  v-if="analysis"
-                  :is-active="routingActive"
-                  :algorithm="routingAlgorithm"
-                  :start="routingStart"
-                  :end="routingEnd"
-                  :waypoints="routingWaypoints"
-                  :can-compute="canComputeRoute"
-                  :optimal-path="optimalPath"
-                  :disabled="isLoading"
-                  @toggle-active="toggleRouting"
-                  @update:algorithm="routingAlgorithm = $event"
-                  @remove-node="toggleRoutingNode"
-                  @compute="computeOptimalRoute"
-                  @clear="clearRouting"
-                />
-              </div>
-
             </div>
           </div>
         </div>
@@ -1604,17 +893,853 @@ const trailPhotoUrl =
       </div>
     </div>
 
-    <!-- Footer for Form screen -->
-    <footer v-if="showUploadForm" class="shrink-0 border-t border-base-200 bg-base-100 py-3 px-6 text-center text-xs text-base-content/40 flex flex-wrap items-center justify-between">
-      <div class="flex items-center gap-2">
-        <span class="font-bold text-emerald-800 dark:text-emerald-400">RiskTrail</span>
-        <span>·</span>
-        <span>Plataforma de telemetría de senderos e inteligencia de montaña</span>
-      </div>
-      <div>
-        © 2024 RiskTrail. Procesamiento biométrico local.
-      </div>
-    </footer>
 
   </div>
 </template>
+
+<style scoped>
+
+    /* ── Header ── */
+    .av-header {
+      margin-bottom: 1.25rem;
+    }
+
+    .av-header__top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.75rem;
+    }
+
+    .av-header__back {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+      padding: 0.375rem 0.75rem;
+      border-radius: 9999px;
+      background: transparent;
+      border: none;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: #1a1a1a;
+      cursor: pointer;
+      transition: background 100ms ease-out;
+    }
+
+    .av-header__back:hover {
+      background: rgba(0, 0, 0, 0.04);
+    }
+
+    .av-header__back:active {
+      transform: scale(0.97);
+      transition: transform 100ms ease-out;
+    }
+
+    .av-header__actions {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .av-action-btn {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+      padding: 0.375rem 0.75rem;
+      border-radius: 9999px;
+      background: rgba(0, 0, 0, 0.03);
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: #1a1a1a;
+      cursor: pointer;
+      transition: background 100ms ease-out;
+    }
+
+    .av-action-btn:hover {
+      background: rgba(0, 0, 0, 0.06);
+    }
+
+    .av-action-btn:active {
+      transform: scale(0.97);
+      transition: transform 100ms ease-out;
+    }
+
+    .av-action-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .av-saved {
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: #059669;
+    }
+
+    .av-header__title {
+      font-size: 1.75rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+      color: #1a1a1a;
+      margin: 0;
+    }
+
+    .av-header__meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: #71717a;
+    }
+
+    .av-header__dot {
+      opacity: 0.3;
+    }
+
+    .av-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.125rem 0.625rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+
+    /* ── Tabs ── */
+    .av-tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid rgba(0,0,0,0.08);
+      margin-bottom: 1.5rem;
+    }
+
+    .av-tabs__item {
+      padding: 0.75rem 1.25rem;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #71717a;
+      cursor: pointer;
+      transition: color 150ms ease-out, border-color 150ms ease-out;
+      margin-bottom: -1px;
+    }
+
+    .av-tabs__item:hover {
+      color: #1a1a1a;
+    }
+
+    .av-tabs__item--active {
+      color: #059669;
+      border-bottom-color: #059669;
+    }
+
+    .av-tabs__item:active {
+      transform: scale(0.97);
+      transition: transform 100ms ease-out;
+    }
+
+    /* ── Resumen Tab ── */
+    .av-resumen {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    /* ── Hero Map ── */
+    .av-map {
+      position: relative;
+      width: 100%;
+      height: 500px;
+      border-radius: 1rem;
+      overflow: hidden;
+      background: #f5f5f5;
+    }
+
+    @media (min-width: 640px) {
+      .av-map {
+        height: 560px;
+      }
+    }
+
+    .av-map--analysis {
+      height: 500px;
+      margin-bottom: 1.5rem;
+    }
+
+    @media (min-width: 640px) {
+      .av-map--analysis {
+        height: 500px;
+      }
+    }
+
+    .av-map__expand {
+      position: absolute;
+      right: 0.75rem;
+      top: 0.75rem;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 2.25rem;
+      height: 2.25rem;
+      border-radius: 0.75rem;
+      background: rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: none;
+      color: #1a1a1a;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      cursor: pointer;
+      transition: background 100ms ease-out, transform 100ms ease-out;
+    }
+
+    .av-map__expand:hover {
+      background: rgba(255, 255, 255, 1);
+      transform: scale(1.05);
+    }
+
+    .av-map__expand:active {
+      transform: scale(0.97);
+      transition: transform 100ms ease-out;
+    }
+
+    /* ── Compact Metrics ── */
+    .av-metrics {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .av-metric {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.625rem 1rem;
+      border-radius: 0.875rem;
+      background: rgba(255,255,255,0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(0,0,0,0.06);
+      flex: 1;
+      min-width: 120px;
+    }
+
+    .av-metric__value {
+      font-size: 0.9375rem;
+      font-weight: 700;
+      color: #1a1a1a;
+    }
+
+    /* ── Profile Strip ── */
+    .av-profile-strip {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.375rem;
+      padding: 0.5rem 0.875rem;
+      border-radius: 0.75rem;
+      background: rgba(255,255,255,0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(0,0,0,0.06);
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: #71717a;
+    }
+
+    .av-profile-strip__icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      background: rgba(5,150,105,0.1);
+      color: #059669;
+      flex-shrink: 0;
+    }
+
+    .av-profile-strip__name {
+      font-weight: 700;
+      color: #1a1a1a;
+    }
+
+    .av-profile-strip__sep {
+      opacity: 0.3;
+    }
+
+    .av-profile-strip__mass {
+      font-weight: 600;
+      color: #059669;
+    }
+
+    .av-profile-strip__edit {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      margin-left: auto;
+      padding: 0.25rem 0.5rem;
+      border-radius: 6px;
+      border: none;
+      background: rgba(5,150,105,0.08);
+      color: #059669;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 150ms ease, transform 100ms ease-out;
+    }
+
+    .av-profile-strip__edit:hover {
+      background: rgba(5,150,105,0.15);
+    }
+
+    .av-profile-strip__edit:active {
+      transform: scale(0.95);
+    }
+
+    /* ── Elevation Profile ── */
+    .av-elevation {
+      border-radius: 1rem;
+      background: rgba(255,255,255,0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(0,0,0,0.06);
+      padding: 1rem;
+    }
+
+    .av-section-title {
+      font-size: 0.8125rem;
+      font-weight: 700;
+      color: #71717a;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin: 0 0 0.75rem 0;
+    }
+
+    /* ── Collapsible Details ── */
+    .av-details {
+      border-radius: 1rem;
+      background: rgba(255,255,255,0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(0,0,0,0.06);
+      overflow: hidden;
+    }
+
+    .av-details__summary {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 1rem;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #1a1a1a;
+      list-style: none;
+      user-select: none;
+    }
+
+    .av-details__summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .av-details__summary::marker {
+      display: none;
+      content: '';
+    }
+
+    .av-details__chevron {
+      margin-left: auto;
+      transition: transform 200ms ease-out;
+    }
+
+    .av-details[open] .av-details__chevron {
+      transform: rotate(180deg);
+    }
+
+    .av-details__body {
+      padding: 0 1rem 1rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    /* ── Profile Row ── */
+    .av-profile-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 0.75rem;
+      border-radius: 0.75rem;
+      background: rgba(0,0,0,0.02);
+    }
+
+    .av-profile-row__info {
+      display: flex;
+      flex-direction: column;
+      gap: 0.125rem;
+    }
+
+    .av-profile-row__name {
+      font-size: 0.875rem;
+      font-weight: 700;
+      color: #1a1a1a;
+    }
+
+    .av-profile-row__detail {
+      font-size: 0.75rem;
+      color: #71717a;
+    }
+
+    /* ── MIDE Bars ── */
+    .av-mide-bars {
+      display: flex;
+      flex-direction: column;
+      gap: 0.875rem;
+    }
+
+    .av-mide-bar {
+      display: flex;
+      flex-direction: column;
+      gap: 0.375rem;
+    }
+
+    .av-mide-bar__header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .av-mide-bar__label {
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: #1a1a1a;
+    }
+
+    .av-mide-bar__value {
+      font-size: 0.8125rem;
+      font-weight: 700;
+      color: #1a1a1a;
+    }
+
+    .av-mide-bar__track {
+      width: 100%;
+      height: 0.5rem;
+      border-radius: 9999px;
+      background: rgba(0,0,0,0.06);
+      overflow: hidden;
+    }
+
+    .av-mide-bar__fill {
+      height: 100%;
+      border-radius: 9999px;
+      background: linear-gradient(to right, #10b981, #f59e0b, #ef4444);
+      transition: width 500ms ease-out;
+    }
+
+    /* ── Cardiac Distribution ── */
+    .av-cardiac {
+      padding-top: 0.5rem;
+    }
+
+    .av-cardiac__bar {
+      display: flex;
+      height: 1.5rem;
+      border-radius: 0.5rem;
+      overflow: hidden;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .av-cardiac__segment {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: width 500ms ease-out;
+    }
+
+    .av-cardiac__segment--z1 {
+      background: #059669;
+    }
+
+    .av-cardiac__segment--z2 {
+      background: #f59e0b;
+    }
+
+    .av-cardiac__segment--z3 {
+      background: #ef4444;
+    }
+
+    .av-cardiac__legend {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 0.375rem;
+      font-size: 0.6875rem;
+      font-weight: 500;
+      color: #71717a;
+      padding: 0 0.25rem;
+    }
+
+    /* ── Description ── */
+    .av-description {
+      font-size: 0.9375rem;
+      line-height: 1.65;
+      color: #71717a;
+      margin: 0;
+    }
+
+    /* ── Action Buttons ── */
+    .av-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      padding-top: 0.5rem;
+    }
+
+    .av-btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.625rem 1.5rem;
+      border-radius: 9999px;
+      background: linear-gradient(135deg, #059669, #047857);
+      color: #fff;
+      border: none;
+      font-size: 0.875rem;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(5, 150, 105, 0.3);
+      transition: box-shadow 150ms ease-out;
+    }
+
+    .av-btn-primary:hover {
+      box-shadow: 0 4px 16px rgba(5, 150, 105, 0.4);
+    }
+
+    .av-btn-primary:active {
+      transform: scale(0.97);
+      transition: transform 100ms ease-out;
+    }
+
+    .av-btn-outline {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.625rem 1.5rem;
+      border-radius: 9999px;
+      background: transparent;
+      border: 1.5px solid rgba(0,0,0,0.12);
+      color: #1a1a1a;
+      font-size: 0.875rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 150ms ease-out;
+    }
+
+    .av-btn-outline:hover {
+      background: rgba(0,0,0,0.03);
+    }
+
+    .av-btn-outline:active {
+      transform: scale(0.97);
+      transition: transform 100ms ease-out;
+    }
+
+    /* ── Detalles Tab ── */
+    .av-detalles {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .av-detalles__section {
+      border-radius: 1rem;
+      background: rgba(255,255,255,0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(0,0,0,0.06);
+      padding: 1.5rem;
+    }
+
+    .av-detalles__subtitle {
+      font-size: 0.8125rem;
+      color: #71717a;
+      margin: 0 0 1.25rem 0;
+    }
+
+    .av-climate-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.75rem;
+    }
+
+    @media (min-width: 640px) {
+      .av-climate-grid {
+        grid-template-columns: repeat(4, 1fr);
+      }
+    }
+
+    .av-climate-card {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      padding: 1rem;
+      border-radius: 0.75rem;
+      background: rgba(0,0,0,0.02);
+    }
+
+    .av-climate-card__label {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: #71717a;
+    }
+
+    .av-climate-card__value {
+      font-size: 1.125rem;
+      font-weight: 700;
+      color: #1a1a1a;
+    }
+
+    /* ── Ruta Tab ── */
+    .av-ruta {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .av-ruta__header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .av-ruta__header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .av-ruta__count {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #71717a;
+      padding: 0.25rem 0.625rem;
+      border-radius: 9999px;
+      background: rgba(0,0,0,0.03);
+    }
+
+    .av-ruta__grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1.5rem;
+    }
+
+    @media (min-width: 1024px) {
+      .av-ruta__grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    /* ── Segment Card ── */
+    .av-segment-card {
+      border-radius: 1rem;
+      background: rgba(255,255,255,0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(0,0,0,0.06);
+      padding: 1.25rem;
+    }
+
+    .av-segment-card__header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .av-segment-card__title {
+      font-size: 0.9375rem;
+      font-weight: 700;
+      color: #1a1a1a;
+      margin: 0;
+    }
+
+    .av-segment-card__direction {
+      font-size: 0.75rem;
+      color: #71717a;
+      margin: 0.125rem 0 0 0;
+    }
+
+    .av-segment-card__meaning {
+      font-size: 0.8125rem;
+      line-height: 1.6;
+      color: #71717a;
+      padding: 0.75rem;
+      border-radius: 0.75rem;
+      background: rgba(0,0,0,0.02);
+      margin-bottom: 0.75rem;
+    }
+
+    .av-segment-card__metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .av-segment-metric {
+      padding: 0.625rem;
+      border-radius: 0.625rem;
+      background: rgba(0,0,0,0.02);
+    }
+
+    .av-segment-metric__label {
+      display: block;
+      font-size: 0.625rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #a1a1aa;
+      margin-bottom: 0.125rem;
+    }
+
+    .av-segment-metric__value {
+      font-size: 0.8125rem;
+      font-weight: 800;
+      color: #1a1a1a;
+    }
+
+    .av-segment-card__tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.375rem;
+    }
+
+    .av-tag {
+      display: inline-flex;
+      padding: 0.1875rem 0.5rem;
+      border-radius: 9999px;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      background: rgba(0,0,0,0.04);
+      color: #71717a;
+    }
+
+    .av-tag--success {
+      background: rgba(16, 185, 129, 0.1);
+      color: #059669;
+    }
+
+    .av-tag--warning {
+      background: rgba(245, 158, 11, 0.1);
+      color: #d97706;
+    }
+
+    .av-tag--error {
+      background: rgba(239, 68, 68, 0.1);
+      color: #dc2626;
+    }
+
+    .av-segment-card__empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2.5rem 1rem;
+      text-align: center;
+      color: #a1a1aa;
+    }
+
+    .av-segment-card__empty p {
+      font-size: 0.8125rem;
+      font-weight: 600;
+      margin: 0.5rem 0 0 0;
+    }
+
+    /* ── Planner Card ── */
+    .av-planner-card {
+      border-radius: 1rem;
+      background: rgba(255,255,255,0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(0,0,0,0.06);
+      padding: 1.25rem;
+    }
+    </style>
+
+<style>
+
+    html[data-theme="jic-dark"] .av-header { color: #fafafa !important; }
+    html[data-theme="jic-dark"] .av-header__title { color: #fafafa !important; }
+    html[data-theme="jic-dark"] .av-header__meta { color: rgba(255, 255, 255, 0.5) !important; }
+    html[data-theme="jic-dark"] .av-header__back { color: #fafafa !important; }
+    html[data-theme="jic-dark"] .av-header__back:hover { background: rgba(255, 255, 255, 0.06) !important; }
+    html[data-theme="jic-dark"] .av-action-btn { color: #fafafa !important; background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.08); }
+    html[data-theme="jic-dark"] .av-action-btn:hover { background: rgba(255, 255, 255, 0.08) !important; }
+    html[data-theme="jic-dark"] .av-saved { color: #34d399 !important; }
+    html[data-theme="jic-dark"] .av-tabs { border-bottom-color: rgba(255, 255, 255, 0.08) !important; }
+    html[data-theme="jic-dark"] .av-tabs__item { color: rgba(255, 255, 255, 0.5) !important; }
+    html[data-theme="jic-dark"] .av-tabs__item:hover { color: #fafafa !important; }
+    html[data-theme="jic-dark"] .av-tabs__item--active { color: #34d399 !important; border-bottom-color: #34d399; }
+    html[data-theme="jic-dark"] .av-map { background: rgba(255, 255, 255, 0.04) !important; }
+    html[data-theme="jic-dark"] .av-map__expand { background: rgba(30, 30, 30, 0.9) !important; color: #fafafa; }
+    html[data-theme="jic-dark"] .av-map__expand:hover { background: rgba(40, 40, 40, 1) !important; }
+    html[data-theme="jic-dark"] .av-metric { background: rgba(255, 255, 255, 0.04) !important; border-color: rgba(255, 255, 255, 0.06) !important; }
+    html[data-theme="jic-dark"] .av-metric__value { color: #fafafa !important; }
+    html[data-theme="jic-dark"] .av-profile-strip { background: rgba(255,255,255,0.04) !important; border-color: rgba(255,255,255,0.06) !important; color: #a1a1aa !important; }
+    html[data-theme="jic-dark"] .av-profile-strip__icon { background: rgba(52,211,153,0.1) !important; color: #34d399 !important; }
+    html[data-theme="jic-dark"] .av-profile-strip__name { color: #fafafa !important; }
+    html[data-theme="jic-dark"] .av-profile-strip__mass { color: #34d399 !important; }
+    html[data-theme="jic-dark"] .av-profile-strip__edit { background: rgba(52,211,153,0.1) !important; color: #34d399 !important; }
+    html[data-theme="jic-dark"] .av-profile-strip__edit:hover { background: rgba(52,211,153,0.18) !important; }
+    html[data-theme="jic-dark"] .av-elevation,
+    html[data-theme="jic-dark"] .av-details,
+    html[data-theme="jic-dark"] .av-detalles__section,
+    html[data-theme="jic-dark"] .av-segment-card,
+    html[data-theme="jic-dark"] .av-planner-card {
+      background: rgba(255, 255, 255, 0.04) !important;
+      border-color: rgba(255, 255, 255, 0.06) !important;
+    }
+    html[data-theme="jic-dark"] .av-section-title { color: rgba(255, 255, 255, 0.5) !important; }
+    html[data-theme="jic-dark"] .av-details__summary { color: #fafafa !important; }
+    html[data-theme="jic-dark"] .av-profile-row { background: rgba(255, 255, 255, 0.04) !important; }
+    html[data-theme="jic-dark"] .av-profile-row__name { color: #fafafa !important; }
+    html[data-theme="jic-dark"] .av-profile-row__detail { color: rgba(255, 255, 255, 0.5) !important; }
+    html[data-theme="jic-dark"] .av-mide-bar__label,
+    html[data-theme="jic-dark"] .av-mide-bar__value { color: #fafafa !important; }
+    html[data-theme="jic-dark"] .av-mide-bar__track { background: rgba(255, 255, 255, 0.08) !important; }
+    html[data-theme="jic-dark"] .av-description { color: rgba(255, 255, 255, 0.6) !important; }
+    html[data-theme="jic-dark"] .av-btn-primary { box-shadow: 0 2px 8px rgba(52, 211, 153, 0.3) !important; }
+    html[data-theme="jic-dark"] .av-btn-primary:hover { box-shadow: 0 4px 16px rgba(52, 211, 153, 0.4) !important; }
+    html[data-theme="jic-dark"] .av-btn-outline { border-color: rgba(255, 255, 255, 0.12) !important; color: #fafafa !important; }
+    html[data-theme="jic-dark"] .av-btn-outline:hover { background: rgba(255, 255, 255, 0.06) !important; }
+    html[data-theme="jic-dark"] .av-climate-card { background: rgba(255, 255, 255, 0.04) !important; }
+    html[data-theme="jic-dark"] .av-climate-card__label { color: rgba(255, 255, 255, 0.5) !important; }
+    html[data-theme="jic-dark"] .av-climate-card__value { color: #fafafa !important; }
+    html[data-theme="jic-dark"] .av-detalles__subtitle { color: rgba(255, 255, 255, 0.5) !important; }
+    html[data-theme="jic-dark"] .av-ruta__count { color: rgba(255, 255, 255, 0.5) !important; background: rgba(255, 255, 255, 0.04) !important; }
+    html[data-theme="jic-dark"] .av-segment-card__title { color: #fafafa !important; }
+    html[data-theme="jic-dark"] .av-segment-card__direction { color: rgba(255, 255, 255, 0.5) !important; }
+    html[data-theme="jic-dark"] .av-segment-card__meaning { color: rgba(255, 255, 255, 0.6) !important; background: rgba(255, 255, 255, 0.04) !important; }
+    html[data-theme="jic-dark"] .av-segment-metric { background: rgba(255, 255, 255, 0.04) !important; }
+    html[data-theme="jic-dark"] .av-segment-metric__label { color: rgba(255, 255, 255, 0.4) !important; }
+    html[data-theme="jic-dark"] .av-segment-metric__value { color: #fafafa !important; }
+    html[data-theme="jic-dark"] .av-tag { background: rgba(255, 255, 255, 0.06) !important; color: rgba(255, 255, 255, 0.6) !important; }
+    html[data-theme="jic-dark"] .av-tag--success { background: rgba(52, 211, 153, 0.12) !important; color: #34d399 !important; }
+    html[data-theme="jic-dark"] .av-tag--warning { background: rgba(251, 191, 36, 0.12) !important; color: #fbbf24 !important; }
+    html[data-theme="jic-dark"] .av-tag--error { background: rgba(248, 113, 113, 0.12) !important; color: #f87171 !important; }
+    html[data-theme="jic-dark"] .av-segment-card__empty { color: rgba(255, 255, 255, 0.3) !important; }
+    </style>
