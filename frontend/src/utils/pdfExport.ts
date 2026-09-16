@@ -16,33 +16,34 @@ const A4_H_MM = 297
  * @param filename Download filename (e.g. "RiskTrail_Informe_2026-09-08.pdf").
  */
 export async function exportElementAsPdf(element: HTMLElement, filename: string): Promise<void> {
+  // Ensure element is visible and has dimensions
+  if (!element || element.offsetWidth === 0 || element.offsetHeight === 0) {
+    throw new Error('Element not visible or has no dimensions')
+  }
+
   const canvas = await html2canvas(element, {
     scale: 1.5,
     useCORS: true,
     backgroundColor: '#ffffff',
     logging: false,
-    allowTaint: false,
-    windowWidth: element.scrollWidth,
-    windowHeight: element.scrollHeight,
+    allowTaint: true,  // Changed from false to allow cross-origin images
+    windowWidth: 794,  // Fixed A4 width in pixels
+    windowHeight: element.scrollHeight || 1123,
     onclone: (clonedDoc) => {
-      // Strip all global stylesheets/styles in the cloned document so html2canvas
-      // never encounters DaisyUI's oklch() color functions. The template uses
-      // 100% inline hex/rgb styles, so removing stylesheets is completely safe.
+      // Remove stylesheets to avoid DaisyUI conflicts
       const styleTags = clonedDoc.querySelectorAll('style, link[rel="stylesheet"]')
       styleTags.forEach((el) => el.remove())
     },
   })
 
-  const imgData = canvas.toDataURL('image/png')
+  if (!canvas || canvas.width === 0 || canvas.height === 0) {
+    throw new Error('Canvas capture failed')
+  }
+
   const imgW = canvas.width
   const imgH = canvas.height
 
-  // If the canvas is very tall (multi-page report), compress to JPEG to reduce size
-  const isLarge = imgH > 2000
-  const finalImgData = isLarge ? canvas.toDataURL('image/jpeg', 0.6) : imgData
-  const finalType = isLarge ? 'JPEG' : 'PNG'
-
-  // Calculate how many mm tall the image is at A4 width.
+  // Calculate how many mm tall the image is at A4 width
   const pdfImgH_MM = (imgH * A4_W_MM) / imgW
 
   const pdf = new jsPDF({
@@ -55,17 +56,12 @@ export async function exportElementAsPdf(element: HTMLElement, filename: string)
   let positionInImg = 0
   let page = 0
 
-  // Only paginate if remaining height exceeds 2mm (prevents rounding-induced blank pages)
   while (remainingH > 2) {
     if (page > 0) pdf.addPage()
 
-    // How many mm of the image fit on this page (minus top margin on first page)
     const sliceH = Math.min(remainingH, A4_H_MM)
-
-    // The source y offset in image pixels
     const srcY = (positionInImg * imgW) / A4_W_MM
 
-    // Create a sub-canvas for this slice to avoid distortion
     const sliceCanvas = document.createElement('canvas')
     const slicePixelH = (sliceH * imgW) / A4_W_MM
     sliceCanvas.width = imgW
@@ -84,7 +80,16 @@ export async function exportElementAsPdf(element: HTMLElement, filename: string)
     page++
   }
 
-  pdf.save(filename)
+  // Trigger download
+  const blob = pdf.output('blob')
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
 
 /**
