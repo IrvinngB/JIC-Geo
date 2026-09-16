@@ -63,6 +63,10 @@ if (!analysis.value) {
 type PageTab = 'resumen' | 'detalles' | 'ruta'
 const activeTab = ref<PageTab>('resumen')
 
+// Menu states
+const showExportMenu = ref(false)
+const showUserMenu = ref(false)
+
 // File upload state moved to UploadFormView
 
 const routePlanner = useRoutePlanner()
@@ -477,145 +481,123 @@ const trailPhotoUrl =
   <div class="relative flex h-screen w-screen flex-col overflow-hidden bg-base-100 text-base-content font-sans">
 
     <!-- ══════════════════════════════════════════════════════════════ -->
-    <!-- TOP NAVIGATION BAR                                           -->
+    <!-- TOP NAVIGATION BAR — Clean, minimal                        -->
     <!-- ══════════════════════════════════════════════════════════════ -->
-    <header class="z-40 flex h-16 shrink-0 items-center justify-between border-b border-base-200 bg-base-100 px-4 sm:px-8 shadow-xs">
-      <!-- Left: Logo & Search -->
-      <div class="flex items-center gap-4 md:gap-6">
-        <RouterLink to="/" class="flex items-center gap-2.5" title="RiskTrail">
-          <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-700 text-white shadow-xs">
-            <AppIcon name="footprints" :size="20" />
-          </div>
-          <span class="text-xl font-black tracking-tight text-base-content">
-            RiskTrail
-          </span>
-        </RouterLink>
+    <header class="z-40 flex h-14 shrink-0 items-center justify-between border-b border-base-200 bg-base-100 px-4 sm:px-6">
+      <!-- Left: Logo -->
+      <RouterLink to="/" class="flex items-center gap-2.5" title="RiskTrail">
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-700 text-white shadow-xs">
+          <AppIcon name="footprints" :size="18" />
+        </div>
+        <span class="text-lg font-black tracking-tight text-base-content">RiskTrail</span>
+      </RouterLink>
 
-        <!-- System Subtitle / Active Route Indicator -->
-        <span class="hidden md:inline-block text-xs font-medium text-base-content/50 border-l border-base-300 pl-4">
-          Plataforma de Telemetría Biomecánica & MIDE
-        </span>
+      <!-- Center: Route name (when analysis active) -->
+      <div class="hidden items-center gap-2 md:flex">
         <span
           v-if="analysis"
-          class="hidden lg:inline-flex items-center gap-1.5 rounded-full bg-base-200/70 px-3 py-1 text-xs font-bold text-base-content/80"
+          class="flex items-center gap-1.5 rounded-full bg-base-200/70 px-3 py-1 text-xs font-bold text-base-content/70"
         >
-          <AppIcon name="route" :size="13" class="text-emerald-600 dark:text-emerald-400" />
-          <span>{{ routeName }}</span>
+          <AppIcon name="route" :size="12" class="text-emerald-600" />
+          {{ routeName }}
         </span>
       </div>
 
-      <!-- Center / Right Links & Actions -->
-      <div class="flex items-center gap-3 sm:gap-4">
-        <!-- Navigation links -->
-        <nav class="hidden items-center gap-1 sm:flex">
-          <RouterLink to="/perfiles" class="btn btn-ghost btn-xs text-base-content/50 hover:text-base-content gap-1">
-            <AppIcon name="footprints" :size="12" /> Perfiles
-          </RouterLink>
-          <RouterLink to="/historial" class="btn btn-ghost btn-xs text-base-content/50 hover:text-base-content gap-1">
-            <AppIcon name="file-text" :size="12" /> Historial
-          </RouterLink>
+      <!-- Right: Actions -->
+      <div class="flex items-center gap-2">
+        <!-- Nav links (desktop) -->
+        <nav class="hidden items-center gap-1 md:flex">
+          <RouterLink to="/perfiles" class="btn btn-ghost btn-xs text-base-content/50 hover:text-base-content">Perfiles</RouterLink>
+          <RouterLink to="/historial" class="btn btn-ghost btn-xs text-base-content/50 hover:text-base-content">Historial</RouterLink>
+          <div class="mx-1 h-4 w-px bg-base-300"></div>
         </nav>
 
-        <!-- Quick PDF export button in navbar when analysis is ready -->
-        <button
-          v-if="analysis"
-          class="btn btn-xs sm:btn-sm btn-outline border-base-300 hover:bg-base-200 gap-1.5 font-bold rounded-lg text-xs"
-          :disabled="isExportingPdf"
-          title="Descargar informe oficial en formato PDF"
-          @click="downloadPdfReport"
-        >
-          <span v-if="isExportingPdf" class="loading loading-spinner loading-xs" />
-          <AppIcon v-else name="download" :size="14" />
-          <span class="hidden sm:inline">{{ isExportingPdf ? 'Exportando...' : 'Descargar PDF' }}</span>
-        </button>
-
-        <!-- GPX Export -->
-        <button
-          v-if="analysis"
-          class="btn btn-xs sm:btn-sm btn-outline border-base-300 hover:bg-base-200 gap-1.5 font-bold rounded-lg text-xs"
-          title="Exportar ruta como GPX"
-          @click="handleExportGpx"
-        >
-          <AppIcon name="download" :size="14" />
-          <span class="hidden sm:inline">GPX</span>
-        </button>
-
-        <!-- Save to history -->
-        <button
-          v-if="auth.isAuthenticated && analysis && !savedToHistory"
-          class="btn btn-xs sm:btn-sm btn-outline border-emerald-300 text-emerald-700 hover:bg-emerald-50 gap-1.5 font-bold rounded-lg text-xs dark:border-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-950"
-          :disabled="isSaving"
-          title="Guardar en historial"
-          @click="saveToHistory"
-        >
-          <span v-if="isSaving" class="loading loading-spinner loading-xs" />
-          <AppIcon v-else name="shield" :size="14" />
-          <span class="hidden sm:inline">{{ isSaving ? 'Guardando...' : 'Guardar' }}</span>
-        </button>
-        <span
-          v-else-if="savedToHistory"
-          class="text-xs font-medium text-emerald-600 dark:text-emerald-400"
-        >
-          ✓ Guardado
-        </span>
-
-        <!-- Share button -->
-        <button
-          v-if="auth.isAuthenticated && savedToHistory"
-          class="btn btn-xs sm:btn-sm btn-outline border-base-300 hover:bg-base-200 gap-1.5 font-bold rounded-lg text-xs"
-          title="Compartir análisis"
-          @click="handleShare"
-        >
-          <AppIcon name="route" :size="14" />
-          <span class="hidden sm:inline">Compartir</span>
-        </button>
-
-        <!-- Share link copied feedback -->
-        <span
-          v-if="shareLinkCopied"
-          class="text-xs font-medium text-emerald-600 dark:text-emerald-400"
-        >
-          ✓ Link copiado
-        </span>
-
-        <!-- Profile avatar -->
-        <div class="flex items-center gap-2">
-          <div
-            class="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-800 text-xs font-bold text-white shadow-xs"
-            :title="profile.name || 'Usuario'"
+        <!-- Export actions (when analysis active) -->
+        <div v-if="analysis" class="flex items-center gap-1">
+          <button
+            class="btn btn-ghost btn-circle btn-sm text-base-content/50 hover:text-base-content"
+            title="Exportar"
+            @click="showExportMenu = !showExportMenu"
           >
-            {{ profileInitial }}
-          </div>
+            <AppIcon name="download" :size="18" />
+          </button>
+
+          <!-- Export dropdown -->
+          <Transition
+            enter-active-class="transition-all duration-200 ease-[cubic-bezier(0.34,1.56,0.64,1)]"
+            leave-active-class="transition-all duration-150 ease-in"
+            enter-from-class="opacity-0 scale-95 -translate-y-1"
+            leave-to-class="opacity-0 scale-95 -translate-y-1"
+          >
+            <div
+              v-if="showExportMenu"
+              class="absolute right-14 top-12 z-50 w-44 rounded-xl border border-base-200 bg-base-100 py-1.5 shadow-xl"
+            >
+              <button class="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-base-content/70 hover:bg-base-200/60 transition-colors" @click="downloadPdfReport; showExportMenu = false">
+                <AppIcon name="download" :size="14" /> PDF
+              </button>
+              <button class="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-base-content/70 hover:bg-base-200/60 transition-colors" @click="handleExportGpx; showExportMenu = false">
+                <AppIcon name="download" :size="14" /> GPX
+              </button>
+              <div v-if="auth.isAuthenticated" class="my-1 h-px bg-base-200"></div>
+              <button v-if="auth.isAuthenticated && !savedToHistory" class="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-emerald-600 hover:bg-emerald-50 transition-colors" @click="saveToHistory; showExportMenu = false">
+                <AppIcon name="shield" :size="14" /> Guardar
+              </button>
+              <button v-if="auth.isAuthenticated && savedToHistory" class="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-base-content/70 hover:bg-base-200/60 transition-colors" @click="handleShare; showExportMenu = false">
+                <AppIcon name="route" :size="14" /> Compartir
+              </button>
+            </div>
+          </Transition>
         </div>
 
-        <!-- Theme toggle -->
-        <button
-          class="btn btn-ghost btn-circle btn-sm text-base-content/60 hover:text-base-content"
-          title="Cambiar tema"
-          @click="toggleTheme"
-        >
-          <AppIcon :name="currentTheme === 'jic-dark' ? 'sun' : 'moon'" :size="18" />
-        </button>
+        <!-- Profile avatar (opens dropdown) -->
+        <div v-if="auth.isAuthenticated" class="relative">
+          <button
+            class="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-700 text-xs font-bold text-white shadow-xs transition hover:ring-2 hover:ring-emerald-400/40"
+            @click="showUserMenu = !showUserMenu"
+          >
+            {{ profileInitial }}
+          </button>
 
-        <!-- CTA Iniciar análisis / Cargar ruta -->
-        <button
-          class="btn bg-emerald-700 hover:bg-emerald-800 text-white rounded-full px-5 text-xs sm:text-sm font-semibold shadow-xs transition"
-          :class="isLoading ? 'btn-disabled opacity-60' : ''"
-          @click="router.push('/mapa/nueva')"
-        >
-          <span v-if="isLoading" class="loading loading-spinner loading-xs" />
-          <span v-else>Nueva ruta</span>
-        </button>
+          <Transition
+            enter-active-class="transition-all duration-200 ease-[cubic-bezier(0.34,1.56,0.64,1)]"
+            leave-active-class="transition-all duration-150 ease-in"
+            enter-from-class="opacity-0 scale-95 -translate-y-1"
+            leave-to-class="opacity-0 scale-95 -translate-y-1"
+          >
+            <div
+              v-if="showUserMenu"
+              class="absolute right-0 top-10 z-50 w-48 rounded-xl border border-base-200 bg-base-100 py-1.5 shadow-xl"
+            >
+              <div class="px-3.5 py-2">
+                <p class="text-sm font-bold text-base-content">{{ auth.user?.name }}</p>
+                <p class="text-[11px] text-base-content/40">{{ auth.user?.email }}</p>
+              </div>
+              <div class="my-1 h-px bg-base-200"></div>
+              <button
+                class="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-base-content/70 hover:bg-base-200/60 transition-colors"
+                @click="toggleTheme(); showUserMenu = false"
+              >
+                <AppIcon :name="currentTheme === 'jic-dark' ? 'sun' : 'moon'" :size="14" />
+                {{ currentTheme === 'jic-dark' ? 'Modo claro' : 'Modo oscuro' }}
+              </button>
+              <button
+                class="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-error/70 hover:bg-error/5 transition-colors"
+                @click="handleLogout(); showUserMenu = false"
+              >
+                <AppIcon name="x" :size="14" /> Cerrar sesión
+              </button>
+            </div>
+          </Transition>
+        </div>
 
-        <button
-          v-if="auth.isAuthenticated"
-          class="hidden sm:inline-block text-xs text-base-content/40 hover:text-base-content"
-          @click="handleLogout"
-        >
-          Salir
-        </button>
+        <!-- Login button (not authenticated) -->
+        <RouterLink v-else to="/login" class="btn btn-primary btn-xs text-white">Iniciar sesión</RouterLink>
       </div>
     </header>
+
+    <!-- Click outside to close menus -->
+    <div v-if="showExportMenu || showUserMenu" class="fixed inset-0 z-30" @click="showExportMenu = false; showUserMenu = false"></div>
 
     <!-- ══════════════════════════════════════════════════════════════ -->
     <!-- ANALYSIS VIEW                                                 -->
