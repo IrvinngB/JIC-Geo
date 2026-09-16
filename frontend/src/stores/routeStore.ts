@@ -620,6 +620,13 @@ export const useRouteStore = defineStore("route", () => {
     optimalPath.value = null;
   }
 
+  function setAnalysis(data: RouteAnalysis): void {
+    analysis.value = data;
+    isSimulationMode.value = false;
+    selectedSegmentSeq.value = null;
+    climateComparison.value = null;
+  }
+
   return {
     analysis,
     isLoading,
@@ -638,6 +645,7 @@ export const useRouteStore = defineStore("route", () => {
     computeOptimalPath,
     clearOptimalPath,
     selectSegment,
+    setAnalysis,
     reset,
   };
 });

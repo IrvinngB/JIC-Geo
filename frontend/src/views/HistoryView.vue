@@ -3,10 +3,12 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useHistoryStore } from '@/stores/historyStore'
+import { useRouteStore } from '@/stores/routeStore'
 import AppIcon from '@/components/icons/AppIcon.vue'
 
 const auth = useAuthStore()
 const historyStore = useHistoryStore()
+const routeStore = useRouteStore()
 const router = useRouter()
 
 const filter = ref<'all' | 'favorites'>('all')
@@ -51,6 +53,18 @@ function mideClass(mide: number | null): string {
   if (!mide || mide <= 2) return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
   if (mide === 3) return 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
   return 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+}
+
+async function loadAnalysis(id: string) {
+  const detail = await historyStore.getDetail(id)
+  if (!detail) return
+  try {
+    const analysisData = JSON.parse(detail.analysis_json)
+    routeStore.setAnalysis(analysisData)
+    router.push('/mapa')
+  } catch (e) {
+    console.error('Error loading analysis:', e)
+  }
 }
 </script>
 
@@ -123,6 +137,13 @@ function mideClass(mide: number | null): string {
             <span class="badge badge-sm mr-2" :class="mideClass(item.mide_global)">
               {{ formatMide(item.mide_global) }}
             </span>
+            <button
+              class="btn btn-ghost btn-xs text-primary opacity-0 group-hover:opacity-100 transition"
+              title="Cargar en el mapa"
+              @click="loadAnalysis(item.id)"
+            >
+              <AppIcon name="route" :size="14" />
+            </button>
             <button
               class="btn btn-ghost btn-xs"
               :class="item.is_favorite ? 'text-amber-500' : 'text-base-content/30'"
