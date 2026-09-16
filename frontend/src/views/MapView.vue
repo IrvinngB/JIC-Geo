@@ -1109,7 +1109,7 @@ const trailPhotoUrl =
     .av-tabs {
       display: flex;
       gap: 0;
-      border-bottom: 1px solid rgba(0,0,0,0.08);
+      border-bottom: 1px solid rgba(0,0,0,0.06);
       margin-bottom: 1.5rem;
     }
 
@@ -1122,8 +1122,23 @@ const trailPhotoUrl =
       font-weight: 600;
       color: #71717a;
       cursor: pointer;
-      transition: color 150ms ease-out, border-color 150ms ease-out;
+      transition: color 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+                  border-color 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
       margin-bottom: -1px;
+      position: relative;
+    }
+
+    .av-tabs__item::after {
+      content: '';
+      position: absolute;
+      bottom: -2px;
+      left: 50%;
+      width: 0;
+      height: 2px;
+      background: #059669;
+      transition: width 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+                  left 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+      border-radius: 1px;
     }
 
     .av-tabs__item:hover {
@@ -1132,12 +1147,17 @@ const trailPhotoUrl =
 
     .av-tabs__item--active {
       color: #059669;
-      border-bottom-color: #059669;
+      border-bottom-color: transparent;
+    }
+
+    .av-tabs__item--active::after {
+      width: 100%;
+      left: 0;
     }
 
     .av-tabs__item:active {
-      transform: scale(0.97);
-      transition: transform 100ms ease-out;
+      transform: scale(0.96);
+      transition: transform 80ms ease-out;
     }
 
     /* ── Resumen Tab ── */
@@ -1224,6 +1244,21 @@ const trailPhotoUrl =
       border: 1px solid rgba(0,0,0,0.06);
       flex: 1;
       min-width: 120px;
+      transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+                  box-shadow 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+                  border-color 0.2s ease;
+      cursor: default;
+    }
+
+    .av-metric:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.08);
+      border-color: rgba(0,0,0,0.1);
+    }
+
+    .av-metric:active {
+      transform: scale(0.98);
+      transition-duration: 80ms;
     }
 
     .av-metric__value {
@@ -1308,6 +1343,13 @@ const trailPhotoUrl =
       -webkit-backdrop-filter: blur(12px);
       border: 1px solid rgba(0,0,0,0.06);
       padding: 1rem;
+      transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+                  box-shadow 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .av-elevation:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px -4px rgba(0, 0, 0, 0.08);
     }
 
     .av-section-title {

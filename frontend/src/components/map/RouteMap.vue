@@ -855,10 +855,10 @@ function buildPopupHTML(segment: RouteAnalysis['segments'][number]): string {
 
     <!-- Danger Alert Banner -->
     <Transition
-      enter-active-class="transition-all duration-300 ease-out"
-      leave-active-class="transition-all duration-200 ease-in"
-      enter-from-class="-translate-y-full opacity-0"
-      leave-to-class="-translate-y-full opacity-0"
+      enter-active-class="transition-all duration-400 ease-[cubic-bezier(0.34,1.56,0.64,1)]"
+      leave-active-class="transition-all duration-200 ease-[cubic-bezier(0.36,0,0.66,-0.56)]"
+      enter-from-class="-translate-y-full opacity-0 scale-95"
+      leave-to-class="-translate-y-full opacity-0 scale-95"
     >
       <div
         v-if="gpsAlertActive"
