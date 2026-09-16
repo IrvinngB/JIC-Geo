@@ -235,3 +235,25 @@ class RouteHistory(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user: Mapped["User"] = relationship()
+
+
+# ---------------------------------------------------------------------------
+# SHARE — Public shared routes
+# ---------------------------------------------------------------------------
+
+
+class SharedRoute(Base):
+    """Public link to share a route analysis."""
+
+    __tablename__ = "shared_routes"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    history_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("route_history.id", ondelete="CASCADE")
+    )
+    share_code: Mapped[str] = mapped_column(String(10), unique=True, nullable=False, index=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    view_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

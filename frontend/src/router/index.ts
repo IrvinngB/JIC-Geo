@@ -44,6 +44,11 @@ const router = createRouter({
       component: () => import('../views/HistoryView.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      path: '/share/:code',
+      name: 'share',
+      component: () => import('../views/ShareView.vue'),
+    },
   ],
 })
 

@@ -116,6 +116,7 @@ async function handleFormSubmit(file: File): Promise<void> {
 
 const isSaving = ref(false)
 const savedToHistory = ref(false)
+const shareLinkCopied = ref(false)
 
 async function saveToHistory(): Promise<void> {
   if (!analysis.value || isSaving.value || savedToHistory.value) return
@@ -132,6 +133,29 @@ async function saveToHistory(): Promise<void> {
     console.error('Error saving to history:', e)
   } finally {
     isSaving.value = false
+  }
+}
+
+async function handleShare(): Promise<void> {
+  // Find the history item we just saved
+  await historyStore.fetchHistory()
+  const latest = historyStore.items[0]
+  if (!latest) return
+
+  try {
+    const res = await fetch('/api/v1/share', {
+      method: 'POST',
+      headers: { ...auth.headers(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ history_id: latest.id }),
+    })
+    if (!res.ok) throw new Error('Error sharing')
+    const data = await res.json()
+    const shareUrl = `${window.location.origin}${data.url}`
+    await navigator.clipboard.writeText(shareUrl)
+    shareLinkCopied.value = true
+    setTimeout(() => { shareLinkCopied.value = false }, 3000)
+  } catch (e) {
+    console.error('Error sharing:', e)
   }
 }
 
@@ -480,6 +504,25 @@ const trailPhotoUrl =
           class="text-xs font-medium text-emerald-600 dark:text-emerald-400"
         >
           ✓ Guardado
+        </span>
+
+        <!-- Share button -->
+        <button
+          v-if="auth.isAuthenticated && savedToHistory"
+          class="btn btn-xs sm:btn-sm btn-outline border-base-300 hover:bg-base-200 gap-1.5 font-bold rounded-lg text-xs"
+          title="Compartir análisis"
+          @click="handleShare"
+        >
+          <AppIcon name="route" :size="14" />
+          <span class="hidden sm:inline">Compartir</span>
+        </button>
+
+        <!-- Share link copied feedback -->
+        <span
+          v-if="shareLinkCopied"
+          class="text-xs font-medium text-emerald-600 dark:text-emerald-400"
+        >
+          ✓ Link copiado
         </span>
 
         <!-- Profile avatar -->
