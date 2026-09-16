@@ -46,7 +46,7 @@ export const useProfileStore = defineStore('profiles', () => {
     weight_kg: number
     load_kg: number
     fitness_level: string
-    surface_type: string
+    surface_type?: string
   }): Promise<UserProfile | null> {
     isLoading.value = true
     error.value = null

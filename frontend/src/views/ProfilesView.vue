@@ -19,7 +19,6 @@ const form = ref({
   weight_kg: 70,
   load_kg: 10,
   fitness_level: 'medium',
-  surface_type: 'dirt',
 })
 
 onMounted(() => {
@@ -32,7 +31,7 @@ onMounted(() => {
 
 function openCreate() {
   editingId.value = null
-  form.value = { name: '', weight_kg: 70, load_kg: 10, fitness_level: 'medium', surface_type: 'dirt' }
+  form.value = { name: '', weight_kg: 70, load_kg: 10, fitness_level: 'medium' }
   showForm.value = true
 }
 
@@ -43,7 +42,6 @@ function openEdit(profile: UserProfile) {
     weight_kg: profile.weight_kg,
     load_kg: profile.load_kg,
     fitness_level: profile.fitness_level,
-    surface_type: profile.surface_type,
   }
   showForm.value = true
 }
@@ -111,7 +109,7 @@ const surfaceLabels: Record<string, string> = {
                 <span v-if="p.is_default" class="badge badge-success badge-xs">Default</span>
               </div>
               <div class="mt-0.5 text-xs text-base-content/50">
-                {{ p.weight_kg }}kg · {{ p.load_kg }}kg carga · {{ fitnessLabels[p.fitness_level] ?? p.fitness_level }} · {{ surfaceLabels[p.surface_type] ?? p.surface_type }}
+                {{ p.weight_kg }}kg · {{ p.load_kg }}kg carga · {{ fitnessLabels[p.fitness_level] ?? p.fitness_level }}
               </div>
             </div>
           </div>
@@ -132,29 +130,15 @@ const surfaceLabels: Record<string, string> = {
             <BaseInput v-model.number="form.weight_kg" label="Peso (kg)" type="number" required />
             <BaseInput v-model.number="form.load_kg" label="Carga (kg)" type="number" required />
           </div>
-          <div class="grid grid-cols-2 gap-4">
-            <label class="form-control">
-              <span class="label-text text-xs font-medium text-base-content/70">Condición física</span>
-              <select v-model="form.fitness_level" class="select select-bordered select-sm w-full">
-                <option value="low">Baja</option>
-                <option value="medium">Media</option>
-                <option value="high">Alta</option>
-                <option value="athlete">Atleta</option>
-              </select>
-            </label>
-            <label class="form-control">
-              <span class="label-text text-xs font-medium text-base-content/70">Superficie</span>
-              <select v-model="form.surface_type" class="select select-bordered select-sm w-full">
-                <option value="dirt">Tierra</option>
-                <option value="paved">Pavimento</option>
-                <option value="gravel">Grava</option>
-                <option value="mud">Barro</option>
-                <option value="sand">Arena</option>
-                <option value="scrub">Matorral</option>
-                <option value="dense_scrub">Matorral denso</option>
-              </select>
-            </label>
-          </div>
+          <label class="form-control">
+            <span class="label-text text-xs font-medium text-base-content/70">Condición física</span>
+            <select v-model="form.fitness_level" class="select select-bordered select-sm w-full">
+              <option value="low">Baja</option>
+              <option value="medium">Media</option>
+              <option value="high">Alta</option>
+              <option value="athlete">Atleta</option>
+            </select>
+          </label>
           <div class="flex gap-2 pt-2">
             <BaseButton type="submit" :loading="profileStore.isLoading">Guardar</BaseButton>
             <BaseButton variant="ghost" @click="showForm = false">Cancelar</BaseButton>

@@ -878,98 +878,146 @@ function buildPopupHTML(segment: RouteAnalysis['segments'][number]): string {
       </div>
     </Transition>
 
-    <!-- Base map control -->
-    <div class="absolute right-3 top-3 z-10 w-44 rounded-xl bg-base-100/95 p-2.5 shadow-xl backdrop-blur sm:right-4 sm:w-64 sm:p-3">
-      <div class="mb-2 flex items-center justify-between gap-2">
-        <div>
-          <h3 class="text-xs font-bold sm:text-sm">Mapa</h3>
-          <p class="hidden text-xs text-base-content/60 sm:block">{{ currentBaseMap.description }}</p>
-        </div>
-        <label class="swap btn btn-ghost btn-xs sm:btn-sm">
-          <input v-model="terrainEnabled" type="checkbox" />
-          <span class="swap-off text-xs font-bold">2D</span>
-          <span class="swap-on text-xs font-bold">3D</span>
-        </label>
-      </div>
+    <!-- ═══ MAP CONTROLS — Floating, minimal ═══ -->
 
-      <div class="grid grid-cols-3 gap-1 sm:gap-2">
+    <!-- Top-right: Map style pill -->
+    <div class="absolute right-3 top-3 z-10 sm:right-4">
+      <div class="flex items-center gap-1 rounded-full border border-base-200 bg-base-100/90 p-1 shadow-lg backdrop-blur">
         <button
           v-for="baseMap in BASE_MAPS"
           :key="baseMap.id"
-          class="btn btn-xs"
-          :class="baseMap.id === selectedBaseMap ? 'btn-primary text-white' : 'btn-ghost'"
+          class="rounded-full px-3 py-1.5 text-[11px] font-semibold transition-all duration-200"
+          :class="baseMap.id === selectedBaseMap
+            ? 'bg-emerald-600 text-white shadow-sm'
+            : 'text-base-content/50 hover:text-base-content hover:bg-base-200/60'"
           @click="setBaseMap(baseMap.id)"
         >
           {{ baseMap.label }}
         </button>
+        <div class="mx-0.5 h-4 w-px bg-base-300"></div>
+        <label class="swap btn btn-ghost btn-xs btn-circle h-7 w-7 min-h-0">
+          <input v-model="terrainEnabled" type="checkbox" />
+          <span class="swap-off text-[10px] font-bold">2D</span>
+          <span class="swap-on text-[10px] font-bold">3D</span>
+        </label>
       </div>
-
-      <button
-        v-if="hasGeometries"
-        class="btn btn-outline btn-xs mt-2 w-full"
-        @click="recenterRoute"
-      >
-        Ver ruta completa
-      </button>
     </div>
 
-    <!-- GPS Location Button -->
+    <!-- Top-right below map style: Recenter button -->
     <button
-      class="absolute right-3 top-[140px] z-10 flex h-10 w-10 items-center justify-center rounded-xl border border-base-300/60 bg-base-100/95 shadow-xl backdrop-blur transition-all hover:scale-105 hover:shadow-2xl sm:right-4 sm:top-[160px]"
-      :class="gpsTracking ? 'border-primary/40 bg-primary/10 text-primary' : 'text-base-content/60 hover:text-base-content'"
-      :title="gpsTracking ? 'Detener seguimiento' : '¿Dónde estoy?'"
-      @click="toggleGps"
+      v-if="hasGeometries"
+      class="absolute right-3 top-14 z-10 flex h-8 items-center gap-1.5 rounded-full border border-base-200 bg-base-100/90 px-3 text-[11px] font-semibold text-base-content/60 shadow-lg backdrop-blur transition-all hover:bg-base-100 hover:text-base-content sm:right-4 sm:top-14"
+      @click="recenterRoute"
     >
-      <AppIcon :name="gpsTracking ? 'compass' : 'map'" :size="18" />
+      <AppIcon name="route" :size="12" />
+      <span class="hidden sm:inline">Ver ruta</span>
     </button>
 
-    <!-- GPS Position Marker (handled by MapLibre marker) -->
+    <!-- Left side: GPS button -->
+    <div class="absolute left-3 top-3 z-10 flex flex-col gap-2 sm:left-4">
+      <!-- GPS toggle -->
+      <button
+        class="flex h-10 w-10 items-center justify-center rounded-full border shadow-lg backdrop-blur transition-all duration-300"
+        :class="gpsTracking
+          ? 'border-emerald-400/40 bg-emerald-500/90 text-white shadow-emerald-500/20 hover:bg-emerald-500'
+          : 'border-base-200 bg-base-100/90 text-base-content/60 hover:bg-base-100 hover:text-base-content'"
+        :title="gpsTracking ? 'Detener seguimiento' : '¿Dónde estoy?'"
+        @click="toggleGps"
+      >
+        <AppIcon :name="gpsTracking ? 'compass' : 'map'" :size="18" />
+      </button>
 
-    <!-- GPS Risk Badge (shown when tracking and on a segment) -->
+      <!-- GPS Risk badge (when tracking) -->
+      <Transition
+        enter-active-class="transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)]"
+        leave-active-class="transition-all duration-200 ease-in"
+        enter-from-class="opacity-0 scale-90 -translate-y-2"
+        leave-to-class="opacity-0 scale-90 -translate-y-2"
+      >
+        <div
+          v-if="gpsTracking && gpsRiskScore !== null"
+          class="flex items-center gap-2 rounded-full border border-base-200 bg-base-100/90 px-3 py-1.5 shadow-lg backdrop-blur"
+        >
+          <div class="h-2.5 w-2.5 rounded-full" :class="gpsRiskColor"></div>
+          <span class="text-xs font-bold" :class="gpsRiskTextColor">{{ gpsRiskScore }}</span>
+        </div>
+      </Transition>
+    </div>
+
+    <!-- Bottom: Segment strip (mobile: horizontal, desktop: panel) -->
     <div
-      v-if="gpsTracking && gpsRiskScore !== null"
-      class="absolute left-3 top-3 z-20 flex items-center gap-2 rounded-xl border border-base-200 bg-base-100/95 px-3 py-2 shadow-xl backdrop-blur sm:left-4 sm:top-4"
+      v-if="props.analysis && !props.hideSegments"
+      class="absolute bottom-3 left-3 right-3 z-10 sm:bottom-4 sm:left-4 sm:right-auto sm:w-80"
     >
-      <div
-        class="h-3 w-3 rounded-full"
-        :class="gpsRiskColor"
-      ></div>
-      <div>
-        <div class="text-[10px] font-bold text-base-content/60">Riesgo actual</div>
-        <div class="text-sm font-black" :class="gpsRiskTextColor">{{ gpsRiskScore }}/100</div>
+      <!-- Mobile: compact pill strip -->
+      <div class="flex items-center gap-2 rounded-2xl border border-base-200 bg-base-100/90 p-2 shadow-xl backdrop-blur sm:hidden">
+        <span class="shrink-0 pl-1 text-[10px] font-bold text-base-content/40">{{ props.analysis.segments.length }}</span>
+        <div class="flex gap-1 overflow-x-auto scrollbar-none">
+          <button
+            v-for="segment in visibleSegments"
+            :key="segment.seq"
+            class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[9px] font-bold transition-all"
+            :class="segment.seq === props.selectedSeq
+              ? 'bg-emerald-600 text-white shadow-sm'
+              : 'bg-base-200/60 text-base-content/50 hover:bg-base-200'"
+            @click="emit('selectSegment', segment.seq)"
+          >
+            {{ segment.seq }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Desktop: compact panel -->
+      <div class="hidden sm:block rounded-2xl border border-base-200 bg-base-100/90 p-3 shadow-xl backdrop-blur">
+        <div class="mb-2 flex items-center justify-between">
+          <span class="text-xs font-bold text-base-content/50">Segmentos</span>
+          <span class="text-[10px] text-base-content/30">{{ props.analysis.segments.length }}</span>
+        </div>
+        <div class="max-h-40 space-y-1 overflow-y-auto pr-1">
+          <button
+            v-for="segment in visibleSegments"
+            :key="segment.seq"
+            class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-all"
+            :class="segment.seq === props.selectedSeq
+              ? 'bg-emerald-50 ring-1 ring-emerald-200'
+              : 'hover:bg-base-200/40'"
+            @click="emit('selectSegment', segment.seq)"
+          >
+            <span
+              class="h-2 w-2 shrink-0 rounded-full"
+              :class="segment.risk_score >= 80 ? 'bg-purple-500' : segment.risk_score >= 60 ? 'bg-red-500' : segment.risk_score >= 40 ? 'bg-orange-500' : segment.risk_score >= 20 ? 'bg-yellow-500' : 'bg-emerald-500'"
+            ></span>
+            <span class="flex-1 text-[11px] font-medium text-base-content/70">
+              #{{ segment.seq }}
+              <span class="text-base-content/30">· {{ segment.direction }}</span>
+            </span>
+            <span class="text-[10px] font-bold text-base-content/40">{{ segment.risk_score }}</span>
+          </button>
+        </div>
       </div>
     </div>
 
+    <!-- Empty state prompt -->
     <Transition
-      enter-active-class="transition-opacity duration-300 ease-out"
-      leave-active-class="transition-opacity duration-500 ease-in"
-      enter-from-class="opacity-0"
-      leave-to-class="opacity-0"
+      enter-active-class="transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)]"
+      leave-active-class="transition-all duration-300 ease-in"
+      enter-from-class="opacity-0 translate-y-4"
+      leave-to-class="opacity-0 translate-y-4"
     >
       <div
         v-if="!props.analysis && showEmptyPrompt"
-        class="pointer-events-none absolute left-3 top-28 z-10 right-3 sm:right-auto sm:left-4 sm:top-4 sm:w-80"
+        class="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
       >
-        <div
-          class="pointer-events-auto flex items-start justify-between gap-2 rounded-xl border border-base-300/60 bg-base-100/90 p-3 shadow-lg backdrop-blur sm:rounded-2xl sm:p-4"
-        >
-          <div class="flex items-start gap-2.5 sm:gap-3">
-            <span
-              class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary sm:h-10 sm:w-10 sm:rounded-xl"
-            >
-              <AppIcon name="map" :size="18" />
-            </span>
-            <div>
-              <h3 class="text-sm font-bold">Carga una ruta</h3>
-              <p class="mt-0.5 text-[11px] leading-relaxed text-base-content/70 sm:mt-1 sm:text-xs">
-                Sube tu GPX o GeoJSON en el panel.
-              </p>
-            </div>
+        <div class="flex items-center gap-3 rounded-2xl border border-base-200 bg-base-100/90 px-5 py-3.5 shadow-xl backdrop-blur">
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600">
+            <AppIcon name="map" :size="20" />
+          </div>
+          <div>
+            <p class="text-sm font-bold text-base-content">Subí tu ruta GPX o GeoJSON</p>
+            <p class="text-[11px] text-base-content/40">Arrastrá el archivo o usá el panel lateral</p>
           </div>
           <button
-            type="button"
-            class="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-base-content"
-            title="Cerrar aviso"
+            class="ml-2 btn btn-ghost btn-circle btn-xs text-base-content/30 hover:text-base-content"
             @click="showEmptyPrompt = false"
           >
             <AppIcon name="x" :size="14" />
@@ -977,81 +1025,6 @@ function buildPopupHTML(segment: RouteAnalysis['segments'][number]): string {
         </div>
       </div>
     </Transition>
-
-    <div
-      v-if="props.analysis && !hasGeometries"
-      class="pointer-events-none absolute left-3 top-28 z-10 right-3 sm:right-auto sm:left-4 sm:top-4 sm:w-80"
-    >
-      <div class="pointer-events-auto alert alert-warning bg-base-100/90 shadow-lg backdrop-blur">
-        <div>
-          <h3 class="font-bold text-sm">Análisis listo</h3>
-          <p class="text-[11px] text-base-content/70 sm:text-xs">
-            No hay geometrías disponibles para dibujar la línea de ruta.
-          </p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Segment list — horizontal strip on mobile, panel on desktop -->
-    <div
-      v-if="props.analysis && !props.hideSegments"
-      class="absolute bottom-3 left-3 right-3 z-10 rounded-xl bg-base-100/95 shadow-xl backdrop-blur sm:bottom-4 sm:left-4 sm:right-auto sm:w-96 sm:rounded-box sm:p-3"
-    >
-      <!-- Mobile: compact horizontal scroll -->
-      <div class="sm:hidden">
-        <div class="mb-1.5 flex items-center justify-between px-1">
-          <h3 class="text-xs font-bold">Segmentos</h3>
-          <span class="badge badge-ghost badge-xs">{{ props.analysis.segments.length }}</span>
-        </div>
-        <div class="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-          <button
-            v-for="segment in visibleSegments"
-            :key="segment.seq"
-            class="flex shrink-0 flex-col items-center gap-0.5 rounded-lg px-2.5 py-1.5 text-center transition"
-            :class="segment.seq === props.selectedSeq ? 'bg-primary/15 ring-1 ring-primary/40' : 'bg-base-200/60'"
-            @click="emit('selectSegment', segment.seq)"
-          >
-            <span class="text-[10px] font-bold leading-none">#{{ segment.seq }}</span>
-            <span
-              class="h-2 w-2 rounded-full"
-              :class="segment.risk_score >= 80 ? 'bg-secondary' : segment.risk_score >= 60 ? 'bg-error' : segment.risk_score >= 40 ? 'bg-warning' : segment.risk_score >= 20 ? 'bg-warning/60' : 'bg-success'"
-            ></span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Desktop: full list panel -->
-      <div class="hidden sm:block">
-        <div class="mb-2 flex items-center justify-between">
-          <h3 class="text-sm font-bold">Segmentos</h3>
-          <span class="badge badge-ghost">{{ props.analysis.segments.length }}</span>
-        </div>
-        <div class="max-h-48 overflow-y-auto pr-2">
-          <div class="space-y-2">
-            <button
-              v-for="segment in visibleSegments"
-              :key="segment.seq"
-              class="btn btn-ghost h-auto min-h-0 w-full justify-start p-2 text-left"
-              :class="segment.seq === props.selectedSeq ? 'bg-primary/10' : ''"
-              @click="emit('selectSegment', segment.seq)"
-            >
-              <div class="flex w-full items-center justify-between gap-3">
-                <div>
-                  <p class="text-xs font-semibold">#{{ segment.seq }} · {{ segment.direction }}</p>
-                  <p class="text-xs text-base-content/60">
-                    {{ segment.velocity_kmh }} km/h · {{ segment.kcal }} kcal · S {{ segment.slope_pct }}
-                  </p>
-                </div>
-                <span class="badge badge-sm" :class="riskBadgeClass(segment.risk_score)">
-                  {{ segment.risk_score }}
-                </span>
-              </div>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
   </section>
 </template>
 

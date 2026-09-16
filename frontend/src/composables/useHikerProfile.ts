@@ -7,14 +7,12 @@ import { reactive, watch } from 'vue'
 
 export type FitnessLevel = 'low' | 'medium' | 'high' | 'athlete'
 
-export type SurfaceType = 'dirt' | 'paved' | 'gravel' | 'mud' | 'sand' | 'scrub' | 'dense_scrub'
-
 export interface HikerProfile {
   name?: string
   weight_kg: number
   load_kg: number
   fitness_level: FitnessLevel
-  surface_type: SurfaceType
+  surface_type: string  // Kept for backend compatibility but not shown in UI
 }
 
 const STORAGE_KEY = 'rt_hiker_profile'
