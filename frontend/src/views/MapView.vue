@@ -28,6 +28,8 @@ import { formatNumber, formatDurationHours } from '@/utils/formatters'
 
 interface RouteMapInstance {
   captureImage: () => string | null
+  getRecordedTrack: () => Array<{ lng: number; lat: number; alt: number }>
+  getTrackDuration: () => number
 }
 
 const routeMapRef = ref<RouteMapInstance | null>(null)
@@ -163,6 +165,40 @@ async function handleShare(): Promise<void> {
 function handleExportGpx(): void {
   if (!analysis.value) return
   exportRouteAsGpx(analysis.value)
+}
+
+async function saveGpsTrack(): Promise<void> {
+  if (!routeMapRef.value || !savedToHistory.value) return
+  const track = routeMapRef.value.getRecordedTrack()
+  const duration = routeMapRef.value.getTrackDuration()
+  if (track.length < 2) return
+
+  // Calculate total distance
+  let totalDist = 0
+  for (let i = 1; i < track.length; i++) {
+    const dx = (track[i].lng - track[i - 1].lng) * 111320 * Math.cos((track[i].lat * Math.PI) / 180)
+    const dy = (track[i].lat - track[i - 1].lat) * 110540
+    totalDist += Math.sqrt(dx * dx + dy * dy)
+  }
+
+  const latest = historyStore.items[0]
+  if (!latest) return
+
+  try {
+    await fetch('/api/v1/tracking', {
+      method: 'POST',
+      headers: { ...auth.headers(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        history_id: latest.id,
+        coordinates: track.map(p => [p.lng, p.lat, p.alt]),
+        total_distance_m: totalDist,
+        duration_s: duration,
+        avg_speed_kmh: duration > 0 ? (totalDist / 1000) / (duration / 3600) : 0,
+      }),
+    })
+  } catch (e) {
+    console.error('Error saving GPS track:', e)
+  }
 }
 
 // ── PDF Export Functionality ──

@@ -91,6 +91,11 @@ const gpsRiskScore = ref<number | null>(null)
 let gpsWatchId: number | null = null
 let gpsMarker: maplibregl.Marker | null = null
 
+// GPS recording for saving track
+const gpsRecordedPoints = ref<Array<{ lng: number; lat: number; alt: number }>>([])
+let gpsTrackStartTime: number | null = null
+let gpsTrackLine: maplibregl.GeoJSONSource | null = null
+
 const gpsRiskColor = computed(() => {
   const s = gpsRiskScore.value ?? 0
   if (s >= 80) return 'bg-purple-500'
@@ -147,6 +152,13 @@ function findNearestSegment(lat: number, lng: number): number | null {
 
 function updateGpsPosition(pos: { lat: number; lng: number }) {
   gpsPosition.value = { lat: pos.lat, lng: pos.lng }
+
+  // Record GPS point for track saving
+  if (gpsTracking.value) {
+    const point = { lng: pos.lng, lat: pos.lat, alt: 0 }
+    gpsRecordedPoints.value.push(point)
+    updateTrackLine()
+  }
 
   if (map) {
     if (!gpsMarker) {
@@ -224,6 +236,8 @@ function toggleGps() {
 function startGps() {
   if (!navigator.geolocation) return
   gpsTracking.value = true
+  gpsRecordedPoints.value = []
+  gpsTrackStartTime = Date.now()
   gpsWatchId = navigator.geolocation.watchPosition(
     (pos) =>
       updateGpsPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
@@ -247,6 +261,35 @@ function stopGps() {
     gpsMarker.remove()
     gpsMarker = null
   }
+}
+
+function updateTrackLine() {
+  if (!map || gpsRecordedPoints.value.length < 2) return
+
+  const coords = gpsRecordedPoints.value.map(p => [p.lng, p.lat])
+  const geojson = { type: 'FeatureCollection' as const, features: [{ type: 'Feature' as const, geometry: { type: 'LineString' as const, coordinates: coords }, properties: {} }] }
+
+  if (!gpsTrackLine) {
+    map.addSource('gps-track', { type: 'geojson', data: geojson })
+    map.addLayer({
+      id: 'gps-track-line',
+      type: 'line',
+      source: 'gps-track',
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': '#22c55e', 'line-width': 3, 'line-opacity': 0.8 },
+    })
+  } else {
+    gpsTrackLine.setData(geojson)
+  }
+}
+
+function getRecordedTrack(): Array<{ lng: number; lat: number; alt: number }> {
+  return [...gpsRecordedPoints.value]
+}
+
+function getTrackDuration(): number {
+  if (!gpsTrackStartTime) return 0
+  return Math.round((Date.now() - gpsTrackStartTime) / 1000)
 }
 
 onMounted(() => {
@@ -327,7 +370,7 @@ function captureImage(): string | null {
   }
 }
 
-defineExpose({ captureImage })
+defineExpose({ captureImage, getRecordedTrack, getTrackDuration })
 
 watch(
   () => props.analysis,
