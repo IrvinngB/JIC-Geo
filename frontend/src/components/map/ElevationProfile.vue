@@ -12,16 +12,15 @@ const emit = defineEmits<{
 }>()
 
 const hoveredSeq = ref<number | null>(null)
-const tooltipX = ref(0)
-const tooltipY = ref(0)
+const hoverDist = ref<number | null>(null)
+const hoverElev = ref<number | null>(null)
 
 const SVG_WIDTH = 800
-const SVG_HEIGHT = 180
-const PADDING = { top: 10, right: 10, bottom: 25, left: 45 }
+const SVG_HEIGHT = 200
+const PADDING = { top: 15, right: 15, bottom: 30, left: 50 }
 
 const profileData = computed(() => {
   if (!props.analysis?.segments) return []
-
   let cumDist = 0
   return props.analysis.segments.map((seg) => {
     const startDist = cumDist
@@ -33,7 +32,8 @@ const profileData = computed(() => {
       elevStart: seg.elevation_start ?? 0,
       elevEnd: seg.elevation_end ?? 0,
       risk: seg.risk_score ?? 0,
-      slope_pct: seg.slope_pct ?? 0,
+      slope: seg.slope_pct ?? 0,
+      velocity: seg.velocity_kmh ?? 0,
     }
   })
 })
@@ -41,95 +41,89 @@ const profileData = computed(() => {
 const chartBounds = computed(() => {
   const data = profileData.value
   if (data.length === 0) return { minDist: 0, maxDist: 1, minElev: 0, maxElev: 100 }
-
   let minElev = Infinity, maxElev = -Infinity
   for (const d of data) {
     minElev = Math.min(minElev, d.elevStart, d.elevEnd)
     maxElev = Math.max(maxElev, d.elevStart, d.elevEnd)
   }
-
-  const elevRange = maxElev - minElev || 100
-  minElev -= elevRange * 0.1
-  maxElev += elevRange * 0.1
-
-  return {
-    minDist: 0,
-    maxDist: data[data.length - 1]?.distEnd ?? 1,
-    minElev,
-    maxElev,
-  }
+  const range = maxElev - minElev || 100
+  return { minDist: 0, maxDist: data[data.length - 1]?.distEnd ?? 1, minElev: minElev - range * 0.1, maxElev: maxElev + range * 0.1 }
 })
 
-function toSvgX(dist: number): number {
+function toX(dist: number): number {
   const b = chartBounds.value
-  const plotW = SVG_WIDTH - PADDING.left - PADDING.right
-  return PADDING.left + ((dist - b.minDist) / (b.maxDist - b.minDist)) * plotW
+  return PADDING.left + ((dist - b.minDist) / (b.maxDist - b.minDist)) * (SVG_WIDTH - PADDING.left - PADDING.right)
 }
 
-function toSvgY(elev: number): number {
+function toY(elev: number): number {
   const b = chartBounds.value
-  const plotH = SVG_HEIGHT - PADDING.top - PADDING.bottom
-  return PADDING.top + plotH - ((elev - b.minElev) / (b.maxElev - b.minElev)) * plotH
+  return PADDING.top + (SVG_HEIGHT - PADDING.top - PADDING.bottom) - ((elev - b.minElev) / (b.maxElev - b.minElev)) * (SVG_HEIGHT - PADDING.top - PADDING.bottom)
 }
 
-// Generate individual segment paths (for colored rendering)
-const segmentPaths = computed(() => {
+// Smooth area path (single continuous curve)
+const areaPath = computed(() => {
   const data = profileData.value
-  if (data.length === 0) return []
-
-  const plotBottom = SVG_HEIGHT - PADDING.bottom
-
-  return data.map((seg) => {
-    // Area path for this segment
-    const x1 = toSvgX(seg.distStart)
-    const x2 = toSvgX(seg.distEnd)
-    const y1 = toSvgY(seg.elevStart)
-    const y2 = toSvgY(seg.elevEnd)
-
-    const area = `M ${x1} ${plotBottom} L ${x1} ${y1} L ${x2} ${y2} L ${x2} ${plotBottom} Z`
-    const line = `M ${x1} ${y1} L ${x2} ${y2}`
-
-    return {
-      seq: seg.seq,
-      area,
-      line,
-      color: riskColor(seg.risk),
-      distStart: seg.distStart,
-      distEnd: seg.distEnd,
-    }
-  })
+  if (data.length === 0) return ''
+  const bottom = SVG_HEIGHT - PADDING.bottom
+  let d = `M ${toX(data[0].distStart)} ${bottom}`
+  for (const seg of data) {
+    d += ` L ${toX(seg.distStart)} ${toY(seg.elevStart)}`
+    d += ` L ${toX(seg.distEnd)} ${toY(seg.elevEnd)}`
+  }
+  d += ` L ${toX(data[data.length - 1].distEnd)} ${bottom} Z`
+  return d
 })
 
-const selectedSeg = computed(() => {
-  if (props.selectedSeq == null) return null
-  return profileData.value.find(p => p.seq === props.selectedSeq) ?? null
+// Smooth line path
+const linePath = computed(() => {
+  const data = profileData.value
+  if (data.length === 0) return ''
+  let d = `M ${toX(data[0].distStart)} ${toY(data[0].elevStart)}`
+  for (const seg of data) {
+    d += ` L ${toX(seg.distEnd)} ${toY(seg.elevEnd)}`
+  }
+  return d
 })
 
-const hoveredSeg = computed(() => {
-  if (hoveredSeq.value == null) return null
-  return profileData.value.find(p => p.seq === hoveredSeq.value) ?? null
+// Risk-colored segments for the line
+const segmentLines = computed(() => {
+  return profileData.value.map(seg => ({
+    seq: seg.seq,
+    d: `M ${toX(seg.distStart)} ${toY(seg.elevStart)} L ${toX(seg.distEnd)} ${toY(seg.elevEnd)}`,
+    color: riskColor(seg.risk),
+  }))
+})
+
+// Min/Max elevation points
+const elevExtremes = computed(() => {
+  const data = profileData.value
+  if (data.length === 0) return null
+  let minElev = Infinity, maxElev = -Infinity
+  let minPt = data[0], maxPt = data[0]
+  for (const seg of data) {
+    if (seg.elevStart < minElev) { minElev = seg.elevStart; minPt = seg }
+    if (seg.elevEnd > maxElev) { maxElev = seg.elevEnd; maxPt = seg }
+  }
+  return {
+    min: { x: toX(minPt.distStart), y: toY(minElev), elev: minElev },
+    max: { x: toX(maxPt.distEnd), y: toY(maxElev), elev: maxElev },
+  }
 })
 
 const yTicks = computed(() => {
   const b = chartBounds.value
   const ticks = []
-  const step = Math.ceil((b.maxElev - b.minElev) / 4 / 50) * 50
+  const step = Math.ceil((b.maxElev - b.minElev) / 4 / 25) * 25
   let elev = Math.ceil(b.minElev / step) * step
-  while (elev <= b.maxElev) {
-    ticks.push(elev)
-    elev += step
-  }
+  while (elev <= b.maxElev) { ticks.push(elev); elev += step }
   return ticks
 })
 
 const xTicks = computed(() => {
   const b = chartBounds.value
   const ticks = []
-  const maxDist = b.maxDist
-  const step = maxDist <= 5 ? 1 : maxDist <= 20 ? 2 : maxDist <= 50 ? 5 : 10
-  for (let d = 0; d <= maxDist; d += step) {
-    ticks.push(d)
-  }
+  const step = b.maxDist <= 5 ? 1 : b.maxDist <= 20 ? 2 : b.maxDist <= 50 ? 5 : 10
+  for (let d = 0; d <= b.maxDist; d += step) ticks.push(d)
   return ticks
 })
 
@@ -141,55 +135,50 @@ function riskColor(risk: number): string {
   return '#22c55e'
 }
 
-function riskColorFaded(risk: number): string {
-  if (risk >= 80) return 'rgba(168,85,247,0.35)'
-  if (risk >= 60) return 'rgba(239,68,68,0.35)'
-  if (risk >= 40) return 'rgba(249,115,22,0.35)'
-  if (risk >= 20) return 'rgba(234,179,8,0.35)'
-  return 'rgba(34,197,94,0.35)'
+function riskLabel(risk: number): string {
+  if (risk >= 80) return 'Extremo'
+  if (risk >= 60) return 'Alto'
+  if (risk >= 40) return 'Medio'
+  if (risk >= 20) return 'Moderado'
+  return 'Bajo'
 }
 
-// FIX: Scale mouse X from screen pixels to SVG viewBox coordinates
 function getSvgX(event: MouseEvent): number {
   const svg = (event.target as SVGElement).closest('svg')
   if (!svg) return 0
-  const rect = svg.getBoundingClientRect()
-  const screenX = event.clientX - rect.left
-  // Convert screen pixels → SVG viewBox units
-  return (screenX / rect.width) * SVG_WIDTH
+  return ((event.clientX - svg.getBoundingClientRect().left) / svg.getBoundingClientRect().width) * SVG_WIDTH
 }
 
 function onMouseMove(event: MouseEvent) {
   const svgX = getSvgX(event)
   const b = chartBounds.value
-  const plotW = SVG_WIDTH - PADDING.left - PADDING.right
-  const dist = b.minDist + ((svgX - PADDING.left) / plotW) * (b.maxDist - b.minDist)
+  const dist = b.minDist + ((svgX - PADDING.left) / (SVG_WIDTH - PADDING.left - PADDING.right)) * (b.maxDist - b.minDist)
 
-  const data = profileData.value
-  for (const seg of data) {
+  // Find segment and interpolate elevation
+  for (const seg of profileData.value) {
     if (dist >= seg.distStart && dist <= seg.distEnd) {
       hoveredSeq.value = seg.seq
-
-      // Tooltip in screen coordinates
-      const svg = (event.target as SVGElement).closest('svg')
-      if (svg) {
-        const rect = svg.getBoundingClientRect()
-        tooltipX.value = event.clientX - rect.left
-        tooltipY.value = event.clientY - rect.top
-      }
+      hoverDist.value = dist
+      // Linear interpolation
+      const t = (dist - seg.distStart) / (seg.distEnd - seg.distStart || 1)
+      hoverElev.value = seg.elevStart + t * (seg.elevEnd - seg.elevStart)
       return
     }
   }
   hoveredSeq.value = null
+  hoverDist.value = null
+  hoverElev.value = null
 }
 
 function onMouseLeave() {
   hoveredSeq.value = null
+  hoverDist.value = null
+  hoverElev.value = null
 }
 </script>
 
 <template>
-  <div v-if="profileData.length > 0" class="relative w-full overflow-hidden">
+  <div v-if="profileData.length > 0" class="relative w-full">
     <svg
       :viewBox="`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`"
       class="w-full h-auto cursor-crosshair"
@@ -198,99 +187,92 @@ function onMouseLeave() {
       @mouseleave="onMouseLeave"
       @click="hoveredSeq != null && emit('selectSegment', hoveredSeq)"
     >
-      <!-- Y axis grid lines -->
+      <defs>
+        <!-- Area gradient -->
+        <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#22c55e" stop-opacity="0.25" />
+          <stop offset="100%" stop-color="#22c55e" stop-opacity="0.02" />
+        </linearGradient>
+        <!-- Clip path for area -->
+        <clipPath id="areaClip">
+          <rect :x="PADDING.left" :y="PADDING.top" :width="SVG_WIDTH - PADDING.left - PADDING.right" :height="SVG_HEIGHT - PADDING.top - PADDING.bottom" />
+        </clipPath>
+      </defs>
+
+      <!-- Y axis grid -->
       <g v-for="elev in yTicks" :key="'y' + elev">
-        <line
-          :x1="PADDING.left"
-          :y1="toSvgY(elev)"
-          :x2="SVG_WIDTH - PADDING.right"
-          :y2="toSvgY(elev)"
-          class="stroke-base-300"
-          stroke-dasharray="3,3"
-          stroke-width="0.5"
-        />
-        <text
-          :x="PADDING.left - 5"
-          :y="toSvgY(elev) + 3"
-          text-anchor="end"
-          class="fill-base-content/40"
-          font-size="9"
-        >{{ Math.round(elev) }}m</text>
+        <line :x1="PADDING.left" :y1="toY(elev)" :x2="SVG_WIDTH - PADDING.right" :y2="toY(elev)" stroke="currentColor" class="text-base-content/5" stroke-width="1" />
+        <text :x="PADDING.left - 6" :y="toY(elev) + 3" text-anchor="end" class="fill-base-content/30" font-size="9" font-family="system-ui">{{ Math.round(elev) }}m</text>
       </g>
 
       <!-- X axis labels -->
       <g v-for="dist in xTicks" :key="'x' + dist">
-        <text
-          :x="toSvgX(dist)"
-          :y="SVG_HEIGHT - 5"
-          text-anchor="middle"
-          class="fill-base-content/40"
-          font-size="9"
-        >{{ dist.toFixed(0) }}km</text>
+        <text :x="toX(dist)" :y="SVG_HEIGHT - 8" text-anchor="middle" class="fill-base-content/30" font-size="9" font-family="system-ui">{{ dist.toFixed(0) }}km</text>
       </g>
 
-      <!-- Segment area fills (colored by risk) -->
-      <path
-        v-for="seg in segmentPaths"
-        :key="'area-' + seg.seq"
-        :d="seg.area"
-        :fill="riskColorFaded(profileData.find(p => p.seq === seg.seq)?.risk ?? 0)"
-      />
+      <!-- Area fill (smooth gradient) -->
+      <path :d="areaPath" fill="url(#areaGrad)" clip-path="url(#areaClip)" />
 
-      <!-- Segment line strokes (colored by risk) -->
+      <!-- Risk-colored line segments -->
       <path
-        v-for="seg in segmentPaths"
+        v-for="seg in segmentLines"
         :key="'line-' + seg.seq"
-        :d="seg.line"
+        :d="seg.d"
         fill="none"
         :stroke="seg.color"
-        stroke-width="2"
+        stroke-width="2.5"
+        stroke-linecap="round"
         stroke-linejoin="round"
+        class="transition-opacity duration-150"
+        :opacity="hoveredSeq != null && hoveredSeq !== seg.seq ? 0.3 : 1"
       />
 
-      <!-- Hover segment highlight -->
-      <rect
-        v-if="hoveredSeg"
-        :x="toSvgX(hoveredSeg.distStart)"
-        :y="PADDING.top"
-        :width="Math.max(2, toSvgX(hoveredSeg.distEnd) - toSvgX(hoveredSeg.distStart))"
-        :height="SVG_HEIGHT - PADDING.top - PADDING.bottom"
-        fill="white"
-        opacity="0.15"
-        rx="2"
-      />
+      <!-- Hover crosshair -->
+      <g v-if="hoverDist != null && hoverElev != null">
+        <line :x1="toX(hoverDist)" :y1="PADDING.top" :x2="toX(hoverDist)" :y2="SVG_HEIGHT - PADDING.bottom" stroke="currentColor" class="text-base-content/15" stroke-width="1" stroke-dasharray="4,4" />
+        <line :x1="PADDING.left" :y1="toY(hoverElev)" :x2="SVG_WIDTH - PADDING.right" :y2="toY(hoverElev)" stroke="currentColor" class="text-base-content/15" stroke-width="1" stroke-dasharray="4,4" />
+        <circle :cx="toX(hoverDist)" :cy="toY(hoverElev)" r="5" fill="#22c55e" stroke="white" stroke-width="2" />
+      </g>
 
-      <!-- Selected segment highlight -->
-      <rect
-        v-if="selectedSeg"
-        :x="toSvgX(selectedSeg.distStart)"
-        :y="PADDING.top"
-        :width="Math.max(2, toSvgX(selectedSeg.distEnd) - toSvgX(selectedSeg.distStart))"
-        :height="SVG_HEIGHT - PADDING.top - PADDING.bottom"
-        fill="white"
-        opacity="0.25"
-        rx="2"
-      />
-
-      <!-- Selected segment marker dot -->
-      <circle
-        v-if="selectedSeg"
-        :cx="toSvgX((selectedSeg.distStart + selectedSeg.distEnd) / 2)"
-        :cy="toSvgY(selectedSeg.elevEnd)"
-        r="4"
-        :fill="riskColor(selectedSeg.risk)"
-        stroke="white"
-        stroke-width="2"
-      />
+      <!-- Min/Max markers -->
+      <g v-if="elevExtremes">
+        <!-- Max -->
+        <circle :cx="elevExtremes.max.x" :cy="elevExtremes.max.y" r="3.5" fill="#ef4444" stroke="white" stroke-width="1.5" />
+        <text :x="elevExtremes.max.x" :y="elevExtremes.max.y - 8" text-anchor="middle" class="fill-red-500" font-size="8" font-weight="600" font-family="system-ui">{{ Math.round(elevExtremes.max.elev) }}m</text>
+        <!-- Min -->
+        <circle :cx="elevExtremes.min.x" :cy="elevExtremes.min.y" r="3.5" fill="#22c55e" stroke="white" stroke-width="1.5" />
+        <text :x="elevExtremes.min.x" :y="elevExtremes.min.y + 14" text-anchor="middle" class="fill-emerald-500" font-size="8" font-weight="600" font-family="system-ui">{{ Math.round(elevExtremes.min.elev) }}m</text>
+      </g>
     </svg>
 
-    <!-- Tooltip -->
-    <div
-      v-if="hoveredSeq != null"
-      class="pointer-events-none absolute z-10 rounded-lg border border-base-200 bg-base-100 px-2.5 py-1.5 text-[10px] shadow-md"
-      :style="{ left: tooltipX + 'px', top: (tooltipY - 40) + 'px' }"
+    <!-- Floating tooltip -->
+    <Transition
+      enter-active-class="transition-all duration-150 ease-out"
+      leave-active-class="transition-all duration-100 ease-in"
+      enter-from-class="opacity-0 scale-95"
+      leave-to-class="opacity-0 scale-95"
     >
-      <span class="font-bold">Tramo #{{ hoveredSeq }}</span>
-    </div>
+      <div
+        v-if="hoveredSeq != null && hoverElev != null"
+        class="pointer-events-none absolute z-10 rounded-xl border border-base-200 bg-base-100/95 px-3 py-2 shadow-lg backdrop-blur-sm"
+        :style="{
+          left: Math.min(Math.max((hoverDist ?? 0) / (chartBounds.maxDist) * 100, 10), 80) + '%',
+          top: '8px',
+          transform: 'translateX(-50%)',
+        }"
+      >
+        <div class="flex items-center gap-2">
+          <span class="h-2 w-2 rounded-full" :style="{ background: riskColor(profileData.find(p => p.seq === hoveredSeq)?.risk ?? 0) }"></span>
+          <span class="text-[11px] font-bold text-base-content">Tramo #{{ hoveredSeq }}</span>
+          <span class="text-[10px] text-base-content/40">·</span>
+          <span class="text-[10px] font-medium text-base-content/60">{{ Math.round(hoverElev) }}m</span>
+        </div>
+        <div class="mt-0.5 flex gap-3 text-[9px] text-base-content/40">
+          <span>{{ riskLabel(profileData.find(p => p.seq === hoveredSeq)?.risk ?? 0) }}</span>
+          <span>{{ profileData.find(p => p.seq === hoveredSeq)?.slope?.toFixed(1) }}%</span>
+          <span>{{ profileData.find(p => p.seq === hoveredSeq)?.velocity?.toFixed(1) }} km/h</span>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
