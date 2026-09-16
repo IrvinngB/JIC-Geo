@@ -49,6 +49,12 @@ const router = createRouter({
       name: 'share',
       component: () => import('../views/ShareView.vue'),
     },
+    {
+      path: '/comparar',
+      name: 'compare',
+      component: () => import('../views/CompareView.vue'),
+      meta: { requiresAuth: true },
+    },
   ],
 })
 

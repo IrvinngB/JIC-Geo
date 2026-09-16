@@ -12,6 +12,8 @@ const routeStore = useRouteStore()
 const router = useRouter()
 
 const filter = ref<'all' | 'favorites'>('all')
+const compareMode = ref(false)
+const selectedForCompare = ref<Set<string>>(new Set())
 
 onMounted(() => {
   if (!auth.isAuthenticated) {
@@ -66,6 +68,26 @@ async function loadAnalysis(id: string) {
     console.error('Error loading analysis:', e)
   }
 }
+
+function toggleCompareSelect(id: string) {
+  if (selectedForCompare.value.has(id)) {
+    selectedForCompare.value.delete(id)
+  } else if (selectedForCompare.value.size < 2) {
+    selectedForCompare.value.add(id)
+  }
+}
+
+function startCompare() {
+  const ids = Array.from(selectedForCompare.value)
+  if (ids.length === 2) {
+    router.push(`/comparar?left=${ids[0]}&right=${ids[1]}`)
+  }
+}
+
+function cancelCompare() {
+  compareMode.value = false
+  selectedForCompare.value.clear()
+}
 </script>
 
 <template>
@@ -77,14 +99,41 @@ async function loadAnalysis(id: string) {
           <h1 class="text-sm font-bold">Historial</h1>
           <span v-if="historyStore.total" class="badge badge-ghost badge-sm">{{ historyStore.total }}</span>
         </div>
-        <button
-          class="btn btn-xs gap-1.5 font-bold"
-          :class="filter === 'favorites' ? 'btn-primary text-white' : 'btn-ghost text-base-content/50'"
-          @click="toggleFilter"
-        >
-          <AppIcon name="shield" :size="12" />
-          Favoritos
-        </button>
+        <div class="flex items-center gap-2">
+          <!-- Compare mode controls -->
+          <template v-if="compareMode">
+            <span class="text-[10px] font-bold text-base-content/40">{{ selectedForCompare.size }}/2 seleccionados</span>
+            <button
+              class="btn btn-xs font-bold"
+              :class="selectedForCompare.size === 2 ? 'btn-primary text-white' : 'btn-disabled'"
+              :disabled="selectedForCompare.size !== 2"
+              @click="startCompare"
+            >
+              Comparar
+            </button>
+            <button class="btn btn-xs btn-ghost text-base-content/40" @click="cancelCompare">Cancelar</button>
+          </template>
+
+          <!-- Normal mode controls -->
+          <template v-else>
+            <button
+              v-if="historyStore.items.length >= 2"
+              class="btn btn-xs gap-1.5 font-bold btn-ghost text-base-content/50"
+              @click="compareMode = true"
+            >
+              <AppIcon name="route" :size="12" />
+              Comparar
+            </button>
+            <button
+              class="btn btn-xs gap-1.5 font-bold"
+              :class="filter === 'favorites' ? 'btn-primary text-white' : 'btn-ghost text-base-content/50'"
+              @click="toggleFilter"
+            >
+              <AppIcon name="shield" :size="12" />
+              Favoritos
+            </button>
+          </template>
+        </div>
       </div>
     </header>
 
@@ -134,6 +183,17 @@ async function loadAnalysis(id: string) {
           </div>
 
           <div class="flex items-center gap-1">
+            <!-- Compare checkbox -->
+            <button
+              v-if="compareMode"
+              class="btn btn-xs btn-circle"
+              :class="selectedForCompare.has(item.id) ? 'btn-primary text-white' : 'btn-ghost text-base-content/30'"
+              @click="toggleCompareSelect(item.id)"
+            >
+              <AppIcon v-if="selectedForCompare.has(item.id)" name="shield" :size="10" />
+              <span v-else class="text-[10px]">{{ selectedForCompare.has(item.id) ? '' : '' }}</span>
+            </button>
+
             <span class="badge badge-sm mr-2" :class="mideClass(item.mide_global)">
               {{ formatMide(item.mide_global) }}
             </span>
