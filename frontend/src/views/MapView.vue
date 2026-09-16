@@ -533,10 +533,10 @@ const trailPhotoUrl =
               v-if="showExportMenu"
               class="absolute right-14 top-12 z-50 w-44 rounded-xl border border-base-200 bg-base-100 py-1.5 shadow-xl"
             >
-              <button class="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-base-content/70 hover:bg-base-200/60 transition-colors" @click="downloadPdfReport; showExportMenu = false">
+              <button class="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-base-content/70 hover:bg-base-200/60 transition-colors" @click="showExportMenu = false; downloadPdfReport()">
                 <AppIcon name="download" :size="14" /> PDF
               </button>
-              <button class="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-base-content/70 hover:bg-base-200/60 transition-colors" @click="handleExportGpx; showExportMenu = false">
+              <button class="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-base-content/70 hover:bg-base-200/60 transition-colors" @click="showExportMenu = false; handleExportGpx()">
                 <AppIcon name="download" :size="14" /> GPX
               </button>
               <div v-if="auth.isAuthenticated" class="my-1 h-px bg-base-200"></div>
