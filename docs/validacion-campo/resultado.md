@@ -1,6 +1,6 @@
 # Datos de Campo — Sesiones de Senderismo
 
-| Nombre | Peso / Perfil | Ruta (Desnivel) | Kcal (App) | Tiempo (App) | KM 1 (Plano) | KM 2 (Subida) | KM 3 (Cierre Real) | General (App) | Observaciones de Campo / Sesgo de Ritmo |
+| Nombre | Peso / Perfil | Ruta (Desnivel) | Kcal (App) | Tiempo (App) | KM 1 (Plano) | KM 2 (Subida) | KM 3 (Cierre Real) | General (Todo el sendero) | Observaciones de Campo / Sesgo de Ritmo |
 |---|---|---|---|---|---|---|---|---|---|
 | Dereck | 60 kg / Alta | Cerro Ancón (+130m) | 239 kcal | 49 min | 2 | 2 | 3 | 4 | Ruta fluida, gestión de esfuerzo óptima por condición y bajo peso. |
 | Jennifer | 53 kg / Media | Cerro Ancón (+130m) | 214 kcal | 56 min | 1 | 4 | 5 | 4 | Condición media compensó ligeramente la fatiga, manteniendo un cierre cercano a la estimación. |
