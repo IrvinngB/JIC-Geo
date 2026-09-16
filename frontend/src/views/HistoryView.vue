@@ -186,12 +186,15 @@ function cancelCompare() {
             <!-- Compare checkbox -->
             <button
               v-if="compareMode"
-              class="btn btn-xs btn-circle"
-              :class="selectedForCompare.has(item.id) ? 'btn-primary text-white' : 'btn-ghost text-base-content/30'"
+              class="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border-2 transition-all duration-200"
+              :class="selectedForCompare.has(item.id)
+                ? 'border-emerald-500 bg-emerald-500 text-white'
+                : 'border-base-300 bg-transparent text-transparent hover:border-emerald-300'"
               @click="toggleCompareSelect(item.id)"
             >
-              <AppIcon v-if="selectedForCompare.has(item.id)" name="shield" :size="10" />
-              <span v-else class="text-[10px]">{{ selectedForCompare.has(item.id) ? '' : '' }}</span>
+              <svg v-if="selectedForCompare.has(item.id)" width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M2.5 6L5 8.5L9.5 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
             </button>
 
             <span class="badge badge-sm mr-2" :class="mideClass(item.mide_global)">
