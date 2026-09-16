@@ -14,6 +14,7 @@ import AppIcon from '@/components/icons/AppIcon.vue'
 import ElevationProfile from '@/components/map/ElevationProfile.vue'
 import RouteReportTemplate from '@/components/report/RouteReportTemplate.vue'
 import { exportElementAsPdf, buildReportFilename } from '@/utils/pdfExport'
+import { exportRouteAsGpx } from '@/utils/gpxExport'
 import { useHikerProfile } from '@/composables/useHikerProfile'
 import { useSimulation } from '@/composables/useSimulation'
 import { useRoutePlanner } from '@/composables/useRoutePlanner'
@@ -157,6 +158,11 @@ async function handleShare(): Promise<void> {
   } catch (e) {
     console.error('Error sharing:', e)
   }
+}
+
+function handleExportGpx(): void {
+  if (!analysis.value) return
+  exportRouteAsGpx(analysis.value)
 }
 
 // ── PDF Export Functionality ──
@@ -485,6 +491,17 @@ const trailPhotoUrl =
           <span v-if="isExportingPdf" class="loading loading-spinner loading-xs" />
           <AppIcon v-else name="download" :size="14" />
           <span class="hidden sm:inline">{{ isExportingPdf ? 'Exportando...' : 'Descargar PDF' }}</span>
+        </button>
+
+        <!-- GPX Export -->
+        <button
+          v-if="analysis"
+          class="btn btn-xs sm:btn-sm btn-outline border-base-300 hover:bg-base-200 gap-1.5 font-bold rounded-lg text-xs"
+          title="Exportar ruta como GPX"
+          @click="handleExportGpx"
+        >
+          <AppIcon name="download" :size="14" />
+          <span class="hidden sm:inline">GPX</span>
         </button>
 
         <!-- Save to history -->
