@@ -257,3 +257,24 @@ class SharedRoute(Base):
     )
     view_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# ---------------------------------------------------------------------------
+# TRACK — GPS Track Recording
+# ---------------------------------------------------------------------------
+
+
+class GpsTrack(Base):
+    """Recorded GPS track from a real hike — stored for comparison with planned route."""
+
+    __tablename__ = "gps_tracks"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    history_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("route_history.id", ondelete="CASCADE")
+    )
+    geom = mapped_column(Geometry("LINESTRINGZ", srid=4326))
+    total_distance_m: Mapped[float | None] = mapped_column(Float)
+    duration_s: Mapped[int | None] = mapped_column(Integer)
+    avg_speed_kmh: Mapped[float | None] = mapped_column(Float)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
