@@ -516,7 +516,7 @@ const trailPhotoUrl =
         <div v-if="analysis" class="flex items-center gap-1">
           <button
             class="btn btn-ghost btn-circle btn-sm text-base-content/50 hover:text-base-content"
-            title="Exportar"
+            title="Descargar, guardar o compartir esta ruta"
             @click="showExportMenu = !showExportMenu"
           >
             <AppIcon name="download" :size="18" />
@@ -531,20 +531,25 @@ const trailPhotoUrl =
           >
             <div
               v-if="showExportMenu"
-              class="absolute right-14 top-12 z-50 w-44 rounded-xl border border-base-200 bg-base-100 py-1.5 shadow-xl"
+              class="absolute right-0 top-10 z-50 w-56 rounded-xl border border-base-200 bg-base-100 py-1.5 shadow-xl"
             >
+              <div class="px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-base-content/30">Exportar</div>
               <button class="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-base-content/70 hover:bg-base-200/60 transition-colors" @click="showExportMenu = false; downloadPdfReport()">
-                <AppIcon name="download" :size="14" /> PDF
+                <AppIcon name="download" :size="14" /> Descargar PDF
               </button>
               <button class="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-base-content/70 hover:bg-base-200/60 transition-colors" @click="showExportMenu = false; handleExportGpx()">
-                <AppIcon name="download" :size="14" /> GPX
+                <AppIcon name="download" :size="14" /> Descargar GPX
               </button>
               <div v-if="auth.isAuthenticated" class="my-1 h-px bg-base-200"></div>
+              <div v-if="auth.isAuthenticated" class="px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-base-content/30">Acciones</div>
               <button v-if="auth.isAuthenticated && !savedToHistory" class="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-emerald-600 hover:bg-emerald-50 transition-colors" @click="saveToHistory; showExportMenu = false">
-                <AppIcon name="shield" :size="14" /> Guardar
+                <AppIcon name="shield" :size="14" /> Guardar en historial
               </button>
               <button v-if="auth.isAuthenticated && savedToHistory" class="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-base-content/70 hover:bg-base-200/60 transition-colors" @click="handleShare; showExportMenu = false">
-                <AppIcon name="route" :size="14" /> Compartir
+                <AppIcon name="route" :size="14" /> Compartir ruta
+              </button>
+              <button v-if="auth.isAuthenticated && savedToHistory" class="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-base-content/70 hover:bg-base-200/60 transition-colors" @click="showExportMenu = false; $router.push('/historial')">
+                <AppIcon name="file-text" :size="14" /> Ver historial
               </button>
             </div>
           </Transition>
@@ -567,13 +572,22 @@ const trailPhotoUrl =
           >
             <div
               v-if="showUserMenu"
-              class="absolute right-0 top-10 z-50 w-48 rounded-xl border border-base-200 bg-base-100 py-1.5 shadow-xl"
+              class="absolute right-0 top-10 z-50 w-52 rounded-xl border border-base-200 bg-base-100 py-1.5 shadow-xl"
             >
               <div class="px-3.5 py-2">
                 <p class="text-sm font-bold text-base-content">{{ auth.user?.name }}</p>
                 <p class="text-[11px] text-base-content/40">{{ auth.user?.email }}</p>
               </div>
               <div class="my-1 h-px bg-base-200"></div>
+              <div class="px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-base-content/30">Navegación</div>
+              <button class="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-base-content/70 hover:bg-base-200/60 transition-colors" @click="showUserMenu = false; $router.push('/perfiles')">
+                <AppIcon name="footprints" :size="14" /> Mis perfiles
+              </button>
+              <button class="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-base-content/70 hover:bg-base-200/60 transition-colors" @click="showUserMenu = false; $router.push('/historial')">
+                <AppIcon name="file-text" :size="14" /> Historial
+              </button>
+              <div class="my-1 h-px bg-base-200"></div>
+              <div class="px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-base-content/30">Preferencias</div>
               <button
                 class="flex w-full items-center gap-2.5 px-3.5 py-2 text-sm text-base-content/70 hover:bg-base-200/60 transition-colors"
                 @click="toggleTheme(); showUserMenu = false"
