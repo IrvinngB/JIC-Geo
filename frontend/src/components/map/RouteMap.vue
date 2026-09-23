@@ -88,6 +88,7 @@ const gpsTracking = ref(false)
 const gpsPosition = ref<{ lat: number; lng: number } | null>(null)
 const gpsNearestSeq = ref<number | null>(null)
 const gpsRiskScore = ref<number | null>(null)
+const gpsError = ref<string | null>(null)
 let gpsWatchId: number | null = null
 let gpsMarker: maplibregl.Marker | null = null
 
@@ -180,6 +181,9 @@ function updateGpsPosition(pos: { lat: number; lng: number }) {
       gpsMarker = new maplibregl.Marker({ element: el, anchor: 'center' })
         .setLngLat([pos.lng, pos.lat])
         .addTo(map)
+
+      // Center map on first GPS position
+      map.flyTo({ center: [pos.lng, pos.lat], zoom: 14, duration: 1000 })
     } else {
       gpsMarker.setLngLat([pos.lng, pos.lat])
     }
@@ -233,27 +237,65 @@ function toggleGps() {
   }
 }
 
-function startGps() {
-  if (!navigator.geolocation) return
-  gpsTracking.value = true
-  gpsRecordedPoints.value = []
-  gpsTrackStartTime = Date.now()
-  gpsWatchId = navigator.geolocation.watchPosition(
-    (pos) =>
-      updateGpsPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-    () => {
-      gpsTracking.value = false
-    },
-    { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 },
-  )
+function describeGeolocationError(err: GeolocationPositionError): string {
+  switch (err.code) {
+    case err.PERMISSION_DENIED:
+      return 'Permiso de ubicación denegado. Habilitalo en el ícono de candado de la barra de direcciones y volvé a intentar.'
+    case err.POSITION_UNAVAILABLE:
+      return 'No se pudo obtener tu ubicación. Revisá el GPS del dispositivo e intentá de nuevo.'
+    case err.TIMEOUT:
+      return 'La ubicación tardó demasiado en fijarse. Volvé a intentar (a la primera el GPS demora).'
+    default:
+      return 'Error de ubicación desconocido.'
+  }
 }
 
-function stopGps() {
+function stopGpsWatch(): void {
   if (gpsWatchId !== null) {
     navigator.geolocation.clearWatch(gpsWatchId)
     gpsWatchId = null
   }
+}
+
+function startGps() {
+  gpsError.value = null
+  // Geolocation is blocked outright on insecure origins (http:// on LAN IPs).
+  if (!window.isSecureContext) {
+    gpsError.value = 'La geolocalización requiere HTTPS o localhost. Estás entrando por una URL insegura.'
+    return
+  }
+  if (!navigator.geolocation) {
+    gpsError.value = 'Este navegador no soporta geolocalización.'
+    return
+  }
+  gpsTracking.value = true
+  gpsRecordedPoints.value = []
+  gpsTrackStartTime = Date.now()
+  gpsWatchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      gpsError.value = null
+      updateGpsPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+    },
+    (err) => {
+      // A timeout on the FIRST fix is common (cold GPS start); keep watching
+      // instead of killing tracking so a later fix can still arrive.
+      if (err.code === err.TIMEOUT && gpsPosition.value === null) {
+        gpsError.value = describeGeolocationError(err)
+        return
+      }
+      stopGpsWatch()
+      gpsTracking.value = false
+      gpsError.value = describeGeolocationError(err)
+    },
+    // 30s: 10s was too short for a cold first fix on many devices.
+    { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 },
+  )
+}
+
+function stopGps() {
+  stopGpsWatch()
   gpsTracking.value = false
+  gpsError.value = null
   gpsPosition.value = null
   gpsNearestSeq.value = null
   gpsRiskScore.value = null
@@ -394,8 +436,11 @@ watch(selectedBaseMap, () => {
   map.setStyle(buildMapStyle(currentBaseMap.value))
   map.once('style.load', () => {
     applyTerrainMode()
-    renderRouteLayer()
-    renderRoutingLayers()
+    // Force re-render after style change — sources/layers are wiped
+    setTimeout(() => {
+      renderRouteLayer()
+      renderRoutingLayers()
+    }, 100)
   })
 })
 
@@ -427,7 +472,11 @@ watch(
 function buildMapStyle(baseMap: BaseMapOption): StyleSpecification {
   return {
     version: 8,
-    glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
+    // Glyphs are self-hosted (public/fonts). fonts.openmaptiles.org now answers
+    // unknown/combined fontstacks with HTTP 200 + an HTML landing page, which
+    // makes MapLibre's protobuf reader throw "Unimplemented type: 4" on zoom
+    // (maplibre-gl-js#6453). Keep text-font in sync with the folder name below.
+    glyphs: '/fonts/{fontstack}/{range}.pbf',
     sources: {
       'base-raster': {
         type: 'raster',
@@ -592,6 +641,14 @@ function renderRouteLayer(): void {
     map.on('click', 'route-segments-line', (event) => {
       const seq = event.features?.[0]?.properties?.seq
       const parsedSeq = typeof seq === 'number' ? seq : Number(seq)
+
+      // Toggle selection: click same segment to deselect
+      if (props.selectedSeq === parsedSeq) {
+        emit('selectSegment', null as any)
+        activePopup?.remove()
+        return
+      }
+
       emit('selectSegment', parsedSeq)
 
       // MAP-02: show MapLibre popup at segment centroid
@@ -622,7 +679,7 @@ function renderRouteLayer(): void {
         layout: {
           'text-field': '!',
           'text-size': 16,
-          'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+          'text-font': ['Noto Sans Bold'],
           'text-anchor': 'center',
           'text-offset': [0, -0.8],
         },
@@ -882,7 +939,7 @@ function buildPopupHTML(segment: RouteAnalysis['segments'][number]): string {
 
     <!-- Top-right: Map style pill -->
     <div class="absolute right-3 top-3 z-10 sm:right-4">
-      <div class="flex items-center gap-1 rounded-full border border-base-200 bg-base-100/90 p-1 shadow-lg backdrop-blur">
+      <div class="flex items-center gap-1 rounded-full border border-base-200 bg-base-100/90 p-1 shadow-lg backdrop-blur" title="Tipo de mapa">
         <button
           v-for="baseMap in BASE_MAPS"
           :key="baseMap.id"
@@ -890,12 +947,13 @@ function buildPopupHTML(segment: RouteAnalysis['segments'][number]): string {
           :class="baseMap.id === selectedBaseMap
             ? 'bg-emerald-600 text-white shadow-sm'
             : 'text-base-content/50 hover:text-base-content hover:bg-base-200/60'"
+          :title="baseMap.description"
           @click="setBaseMap(baseMap.id)"
         >
           {{ baseMap.label }}
         </button>
         <div class="mx-0.5 h-4 w-px bg-base-300"></div>
-        <label class="swap btn btn-ghost btn-xs btn-circle h-7 w-7 min-h-0">
+        <label class="swap btn btn-ghost btn-xs btn-circle h-7 w-7 min-h-0" title="Alternar vista 2D/3D">
           <input v-model="terrainEnabled" type="checkbox" />
           <span class="swap-off text-[10px] font-bold">2D</span>
           <span class="swap-on text-[10px] font-bold">3D</span>
@@ -907,6 +965,7 @@ function buildPopupHTML(segment: RouteAnalysis['segments'][number]): string {
     <button
       v-if="hasGeometries"
       class="absolute right-3 top-14 z-10 flex h-8 items-center gap-1.5 rounded-full border border-base-200 bg-base-100/90 px-3 text-[11px] font-semibold text-base-content/60 shadow-lg backdrop-blur transition-all hover:bg-base-100 hover:text-base-content sm:right-4 sm:top-14"
+      title="Centrar mapa en la ruta completa"
       @click="recenterRoute"
     >
       <AppIcon name="route" :size="12" />
@@ -921,7 +980,7 @@ function buildPopupHTML(segment: RouteAnalysis['segments'][number]): string {
         :class="gpsTracking
           ? 'border-emerald-400/40 bg-emerald-500/90 text-white shadow-emerald-500/20 hover:bg-emerald-500'
           : 'border-base-200 bg-base-100/90 text-base-content/60 hover:bg-base-100 hover:text-base-content'"
-        :title="gpsTracking ? 'Detener seguimiento' : '¿Dónde estoy?'"
+        :title="gpsTracking ? 'Detener seguimiento GPS' : 'Activar ubicación GPS para ver tu posición en el mapa'"
         @click="toggleGps"
       >
         <AppIcon :name="gpsTracking ? 'compass' : 'map'" :size="18" />
@@ -942,6 +1001,30 @@ function buildPopupHTML(segment: RouteAnalysis['segments'][number]): string {
           <span class="text-xs font-bold" :class="gpsRiskTextColor">{{ gpsRiskScore }}</span>
         </div>
       </Transition>
+
+      <!-- GPS error toast: geolocation failures must be visible, not silent -->
+      <Transition
+        enter-active-class="transition-all duration-200 ease-out"
+        leave-active-class="transition-all duration-150 ease-in"
+        enter-from-class="opacity-0 -translate-x-2"
+        leave-to-class="opacity-0 -translate-x-2"
+      >
+        <div
+          v-if="gpsError"
+          class="flex max-w-[230px] items-start gap-2 rounded-xl border border-red-200 bg-red-50/95 px-3 py-2 shadow-lg backdrop-blur"
+          role="alert"
+        >
+          <AppIcon name="alert-triangle" :size="14" class="mt-0.5 shrink-0 text-red-500" />
+          <span class="flex-1 text-[11px] font-medium leading-snug text-red-700">{{ gpsError }}</span>
+          <button
+            class="shrink-0 text-red-400 transition-colors hover:text-red-600"
+            title="Cerrar"
+            @click="gpsError = null"
+          >
+            <AppIcon name="x" :size="12" />
+          </button>
+        </div>
+      </Transition>
     </div>
 
     <!-- Bottom: Segment strip (mobile: horizontal, desktop: panel) -->
@@ -960,7 +1043,7 @@ function buildPopupHTML(segment: RouteAnalysis['segments'][number]): string {
             :class="segment.seq === props.selectedSeq
               ? 'bg-emerald-600 text-white shadow-sm'
               : 'bg-base-200/60 text-base-content/50 hover:bg-base-200'"
-            @click="emit('selectSegment', segment.seq)"
+            @click="emit('selectSegment', segment.seq === props.selectedSeq ? null : segment.seq)"
           >
             {{ segment.seq }}
           </button>
@@ -981,7 +1064,7 @@ function buildPopupHTML(segment: RouteAnalysis['segments'][number]): string {
             :class="segment.seq === props.selectedSeq
               ? 'bg-emerald-50 ring-1 ring-emerald-200'
               : 'hover:bg-base-200/40'"
-            @click="emit('selectSegment', segment.seq)"
+            @click="emit('selectSegment', segment.seq === props.selectedSeq ? null : segment.seq)"
           >
             <span
               class="h-2 w-2 shrink-0 rounded-full"
@@ -1006,21 +1089,48 @@ function buildPopupHTML(segment: RouteAnalysis['segments'][number]): string {
     >
       <div
         v-if="!props.analysis && showEmptyPrompt"
-        class="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
+        class="absolute left-1/2 top-1/2 z-10 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2"
       >
-        <div class="flex items-center gap-3 rounded-2xl border border-base-200 bg-base-100/90 px-5 py-3.5 shadow-xl backdrop-blur">
-          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600">
-            <AppIcon name="map" :size="20" />
+        <div class="rounded-2xl border border-base-200 bg-base-100/95 p-6 shadow-2xl backdrop-blur">
+          <div class="mb-4 flex items-center gap-3">
+            <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-lg shadow-emerald-500/20">
+              <AppIcon name="mountain" :size="24" />
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-base-content">Bienvenido a RiskTrail</h3>
+              <p class="text-xs text-base-content/50">Analizá el riesgo de tus rutas de senderismo</p>
+            </div>
           </div>
-          <div>
-            <p class="text-sm font-bold text-base-content">Subí tu ruta GPX o GeoJSON</p>
-            <p class="text-[11px] text-base-content/40">Arrastrá el archivo o usá el panel lateral</p>
+
+          <div class="space-y-3">
+            <div class="flex items-start gap-3 rounded-xl bg-base-200/50 p-3">
+              <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-[11px] font-bold text-emerald-600">1</span>
+              <div>
+                <p class="text-xs font-semibold text-base-content">Completá tu perfil</p>
+                <p class="text-[11px] text-base-content/50">Peso, carga y condición física en el panel lateral</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3 rounded-xl bg-base-200/50 p-3">
+              <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-[11px] font-bold text-emerald-600">2</span>
+              <div>
+                <p class="text-xs font-semibold text-base-content">Subí tu ruta</p>
+                <p class="text-[11px] text-base-content/50">Arrastrá un GPX o GeoJSON al panel, o hacé click para seleccionar</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3 rounded-xl bg-base-200/50 p-3">
+              <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-[11px] font-bold text-emerald-600">3</span>
+              <div>
+                <p class="text-xs font-semibold text-base-content">Explorá el resultado</p>
+                <p class="text-[11px] text-base-content/50">Mapa coloreado por riesgo, métricas y recomendaciones</p>
+              </div>
+            </div>
           </div>
+
           <button
-            class="ml-2 btn btn-ghost btn-circle btn-xs text-base-content/30 hover:text-base-content"
+            class="mt-4 w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-700"
             @click="showEmptyPrompt = false"
           >
-            <AppIcon name="x" :size="14" />
+            Entendido
           </button>
         </div>
       </div>

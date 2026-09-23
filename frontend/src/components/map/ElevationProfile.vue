@@ -8,7 +8,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  selectSegment: [seq: number]
+  selectSegment: [seq: number | null]
 }>()
 
 const hoveredSeq = ref<number | null>(null)
@@ -185,7 +185,7 @@ function onMouseLeave() {
       preserveAspectRatio="xMidYMid meet"
       @mousemove="onMouseMove"
       @mouseleave="onMouseLeave"
-      @click="hoveredSeq != null && emit('selectSegment', hoveredSeq)"
+      @click="hoveredSeq != null && emit('selectSegment', hoveredSeq === props.selectedSeq ? null : hoveredSeq)"
     >
       <defs>
         <!-- Area gradient -->
