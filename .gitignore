@@ -16,6 +16,9 @@ dist/
 node_modules/
 frontend/dist/
 
+# Spec-driven development artifacts (local only)
+openspec/
+
 # Data (large binary files — add specific samples manually if needed)
 data/dem/*.tif
 data/dem/*.img
