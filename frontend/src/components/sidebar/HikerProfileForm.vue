@@ -16,16 +16,6 @@ const fitnessOptions = [
   { value: 'high', label: 'Alta' },
   { value: 'athlete', label: 'Atleta' },
 ]
-
-const surfaceOptions = [
-  { value: 'dirt', label: 'Tierra compacta' },
-  { value: 'paved', label: 'Pavimento' },
-  { value: 'gravel', label: 'Grava' },
-  { value: 'mud', label: 'Barro' },
-  { value: 'sand', label: 'Arena' },
-  { value: 'scrub', label: 'Matorral' },
-  { value: 'dense_scrub', label: 'Matorral denso' },
-]
 </script>
 
 <template>
@@ -66,14 +56,6 @@ const surfaceOptions = [
         v-model="profile.fitness_level"
         label="Condición física"
         :options="fitnessOptions"
-        placeholder="Seleccionar..."
-        :disabled="props.disabled"
-      />
-
-      <BaseSelect
-        v-model="profile.surface_type"
-        label="Tipo de superficie"
-        :options="surfaceOptions"
         placeholder="Seleccionar..."
         :disabled="props.disabled"
       />
