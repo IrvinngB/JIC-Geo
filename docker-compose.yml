@@ -39,7 +39,7 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
-    command: sh -c "npm run dev -- --host --port 5173"
+    command: sh -c "pnpm dev --host --port 5173"
 
 volumes:
   pgdata:

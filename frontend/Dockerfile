@@ -1,13 +1,15 @@
-FROM node:20-slim
+FROM node:22-slim
+
+RUN corepack enable
 
 WORKDIR /app
 
-COPY package.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
-RUN npm install
+RUN pnpm install --frozen-lockfile
 
 COPY . .
 
 EXPOSE 5173
 
-CMD ["npm", "run", "dev", "--", "--host"]
+CMD ["pnpm", "dev", "--host"]

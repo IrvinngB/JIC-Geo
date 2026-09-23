@@ -18,7 +18,7 @@ backend:
 
 # Run frontend locally
 frontend:
-	cd frontend && npm run dev
+	cd frontend && pnpm dev
 
 # Lint backend
 lint:

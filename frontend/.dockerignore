@@ -8,4 +8,3 @@ Thumbs.db
 .cache
 .vite
 *.local
-pnpm-lock.yaml
